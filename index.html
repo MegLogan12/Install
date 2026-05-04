@@ -150,7 +150,7 @@ body{max-width:1120px;margin:0 auto;background:#f6f7f9;box-shadow:0 18px 60px rg
 <div class="scr" id="s2"><div class="tabs" id="tb"></div><div class="list" id="jl"></div></div>
 <div class="scr" id="s3"><div id="fc"></div><div class="bb"><button class="bn bo" onclick="back()">&#8249; Back</button><button class="bn bs" onclick="saveForm()">&#128190; Save</button><button class="bn bp" onclick="sub()">&#9992; Submit</button></div></div>
 <!-- Photo picker modal -->
-<div class="modal-bg" id="pModal"><div class="modal"><h3>Add Photo</h3><div class="mo"><button class="cam" onclick="pickCamera()"><span>&#128247;</span>Camera</button><button class="lib" onclick="pickLibrary()"><span>&#128444;</span>Photo Library</button></div><div class="mc"><button onclick="closePicker()">Cancel</button></div></div></div>
+<div class="modal-bg" id="pModal"><div class="modal"><h3 id="pModalTitle">Add Photo</h3><div class="mo"><button class="cam" id="pCameraBtn" onclick="pickCamera()"><span>&#128247;</span><span id="pCameraLabel">Camera</span></button><button class="lib" id="pLibraryBtn" onclick="pickLibrary()"><span>&#128444;</span><span id="pLibraryLabel">Photo Library</span></button></div><div class="mc"><button onclick="closePicker()">Cancel</button></div></div></div>
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app.js"></script>
