@@ -2,6 +2,11 @@ var D = { j: {}, z: {} };
 var cFM = null, cFlt = 'All', cJob = null, photoData = {}, pickerIdx = null;
 var tc = function(t){return t.indexOf('Aqua')>=0?'aq':t.indexOf('Quality')>=0?'qi':t.indexOf('Sod')>=0?'so':t.indexOf('Builder')>=0?'bm':'cc'};
 var DATA_FILE = 'dispatch-data.xlsx';
+var MOBILE_CAPTURE = (function(){
+  var ua = navigator.userAgent || '';
+  var touchMac = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  return /iPhone|iPad|iPod|Android/i.test(ua) || touchMac;
+})();
 
 document.getElementById('dt').textContent = new Date().toLocaleDateString('en-US', {
   weekday: 'long',
@@ -19,6 +24,24 @@ document.addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' '
 
 function setGridStatus(title,detail){
   document.getElementById('fg').innerHTML='<div class="status-card"><div class="status-title">'+he(title)+'</div><div class="status-detail">'+he(detail)+'</div></div>';
+}
+
+function syncPickerUi(){
+  var title = document.getElementById('pModalTitle');
+  var cameraBtn = document.getElementById('pCameraBtn');
+  var cameraLabel = document.getElementById('pCameraLabel');
+  var libraryLabel = document.getElementById('pLibraryLabel');
+  if(!title||!cameraBtn||!cameraLabel||!libraryLabel)return;
+  if(MOBILE_CAPTURE){
+    title.textContent='Add Photo';
+    cameraBtn.style.display='';
+    cameraLabel.textContent='Camera';
+    libraryLabel.textContent='Photo Library';
+  }else{
+    title.textContent='Upload Photo';
+    cameraBtn.style.display='none';
+    libraryLabel.textContent='Choose File';
+  }
 }
 
 function buildDataFromWorkbook(workbook){
@@ -115,7 +138,7 @@ function bPhotos(items){var h='<div class="sec"><div class="sh">&#128248; Requir
 
 function bVio(){return '<div class="vi"><div class="vh">&#9888; Safety Violations<div class="vc"><button class="vn on" data-v="0">0</button><button class="vn" data-v="1">1</button><button class="vn" data-v="2">2</button><button class="vn" data-v="3">3+</button></div></div><div class="vb" id="vbd"><label style="font-size:10px;font-weight:600;color:#757575">Describe *</label><textarea placeholder="Describe issue..."></textarea></div></div>'}
 
-function openPicker(idx){pickerIdx=idx;document.getElementById('pModal').classList.add('show')}
+function openPicker(idx){pickerIdx=idx;syncPickerUi();document.getElementById('pModal').classList.add('show')}
 function closePicker(){document.getElementById('pModal').classList.remove('show');pickerIdx=null}
 function pickCamera(){if(pickerIdx==null)return;closePicker();document.getElementById('pfc'+pickerIdx).click()}
 function pickLibrary(){if(pickerIdx==null)return;closePicker();document.getElementById('pfl'+pickerIdx).click()}
@@ -145,4 +168,5 @@ toast('Submitted: '+cJob[4]+' #'+cJob[0]);setTimeout(function(){back()},1500)}
 
 setGridStatus('Loading routes','Reading '+DATA_FILE+'...');
 makeClickable();
+syncPickerUi();
 loadDispatchData();
