@@ -31,7 +31,7 @@
         </filters>
         <connector><targetReference>Get_Campaign</targetReference></connector>
     </start>
-    <status>Active</status>
+    <status>Inactive</status>
 
     <!-- ── ASSIGNMENTS ──────────────────────────────────────────────────── -->
 
