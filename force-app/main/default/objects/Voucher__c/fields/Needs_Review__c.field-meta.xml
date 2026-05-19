@@ -5,6 +5,6 @@
     <description>Set to true automatically when: builder account is ambiguous or could not be confidently matched, duplicate voucher detected for same lot/property/address, or claim validation fails. Routes to review queue. Clear only after review is complete.</description>
     <type>Checkbox</type>
     <defaultValue>false</defaultValue>
-    <trackHistory>true</trackHistory>
+    <trackHistory>false</trackHistory>
     <trackTrending>false</trackTrending>
 </CustomField>

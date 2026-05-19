@@ -64,17 +64,43 @@
     </start>
     <status>Active</status>
 
-    <!-- ── VARIABLES ──────────────────────────────────────────────────── -->
-    <variables>
-        <name>DuplicateVouchers</name>
-        <dataType>SObject</dataType>
-        <isCollection>true</isCollection>
-        <isInput>false</isInput>
-        <isOutput>false</isOutput>
-        <objectType>Voucher__c</objectType>
-    </variables>
+    <!-- ── CUSTOM ERRORS ─────────────────────────────────────────────────── -->
+    <customErrors>
+        <name>Block_No_Homeowner</name>
+        <label>Block — Homeowner Contact Required</label>
+        <locationX>440</locationX>
+        <locationY>240</locationY>
+        <customErrorMessages>
+            <errorMessage>A homeowner contact must be assigned before this voucher can advance to {!$Record.Status__c}. The builder account (Builder_Account__c) identifies the sponsor. The homeowner contact (Contact__c) identifies the claimant. Both are required for this status. Assign a Contact and try again.</errorMessage>
+            <isFieldError>true</isFieldError>
+            <fieldSelection>Contact__c</fieldSelection>
+        </customErrorMessages>
+    </customErrors>
 
-    <!-- ── STEP 1: DOES THIS STATUS REQUIRE CONTACT? ─────────────────── -->
+    <customErrors>
+        <name>Block_No_Lot</name>
+        <label>Block — Lot or Property or Address Required</label>
+        <locationX>440</locationX>
+        <locationY>480</locationY>
+        <customErrorMessages>
+            <errorMessage>A property address, homeowner property, or lot must be linked before this voucher can advance to {!$Record.Status__c}. The one-voucher-per-lot rule cannot be enforced without an address. Link Homeowner_Property__c or populate the address key and try again.</errorMessage>
+            <isFieldError>true</isFieldError>
+            <fieldSelection>Homeowner_Property__c</fieldSelection>
+        </customErrorMessages>
+    </customErrors>
+
+    <customErrors>
+        <name>Block_Duplicate_Voucher</name>
+        <label>Block — Duplicate Voucher Detected</label>
+        <locationX>440</locationX>
+        <locationY>840</locationY>
+        <customErrorMessages>
+            <errorMessage>A duplicate Lennar grilling island voucher already exists for this property or homeowner. Only one voucher per lot/address is allowed. This voucher has been flagged for review. Do not apply a quote credit until the duplicate is reviewed and resolved. Contact your manager to approve an exception.</errorMessage>
+            <isFieldError>false</isFieldError>
+        </customErrorMessages>
+    </customErrors>
+
+    <!-- ── DECISIONS ─────────────────────────────────────────────────────── -->
     <decisions>
         <name>Requires_Contact_Check</name>
         <label>Does this status require Contact__c?</label>
@@ -83,7 +109,7 @@
         <defaultConnectorLabel>No — Draft/Active/Expired/Voided — exit</defaultConnectorLabel>
         <rules>
             <name>Contact_Required_Status</name>
-            <conditionLogic>1 OR 2 OR 3 OR 4 OR 5 OR 6 OR 7 OR 8 OR 9 OR 10 OR 11</conditionLogic>
+            <conditionLogic>1 OR 2 OR 3 OR 4 OR 5 OR 6 OR 7 OR 8 OR 9 OR 10</conditionLogic>
             <conditions>
                 <leftValueReference>$Record.Status__c</leftValueReference>
                 <operator>EqualTo</operator>
@@ -134,17 +160,11 @@
                 <operator>EqualTo</operator>
                 <rightValue><stringValue>Redeemed</stringValue></rightValue>
             </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Validated</stringValue></rightValue>
-            </conditions>
             <connector><targetReference>Is_Contact_Present</targetReference></connector>
             <label>Yes — requires Contact</label>
         </rules>
     </decisions>
 
-    <!-- ── STEP 2: IS CONTACT__C PRESENT? ────────────────────────────── -->
     <decisions>
         <name>Is_Contact_Present</name>
         <label>Is Contact__c (homeowner) set?</label>
@@ -165,7 +185,6 @@
         </rules>
     </decisions>
 
-    <!-- ── STEP 3: DOES THIS STATUS ALSO REQUIRE LOT/ADDRESS? ────────── -->
     <decisions>
         <name>Requires_Lot_Check</name>
         <label>Does this status require Lot/Property/Address?</label>
@@ -175,7 +194,7 @@
         <defaultConnectorLabel>No — Submitted only needs Contact</defaultConnectorLabel>
         <rules>
             <name>Lot_Required_Status</name>
-            <conditionLogic>1 OR 2 OR 3 OR 4 OR 5 OR 6 OR 7 OR 8 OR 9 OR 10</conditionLogic>
+            <conditionLogic>1 OR 2 OR 3 OR 4 OR 5 OR 6 OR 7 OR 8 OR 9</conditionLogic>
             <conditions>
                 <leftValueReference>$Record.Status__c</leftValueReference>
                 <operator>EqualTo</operator>
@@ -221,17 +240,11 @@
                 <operator>EqualTo</operator>
                 <rightValue><stringValue>Redeemed</stringValue></rightValue>
             </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Builder Invoiced</stringValue></rightValue>
-            </conditions>
             <connector><targetReference>Is_Lot_Or_Property_Present</targetReference></connector>
             <label>Yes — Validated or beyond</label>
         </rules>
     </decisions>
 
-    <!-- ── STEP 4: IS LOT OR PROPERTY OR ADDRESS PRESENT? ────────────── -->
     <decisions>
         <name>Is_Lot_Or_Property_Present</name>
         <label>Is Lot, Homeowner_Property, or Address Key present?</label>
@@ -262,7 +275,6 @@
         </rules>
     </decisions>
 
-    <!-- ── STEP 5: DOES THIS STATUS REQUIRE DUPLICATE CHECK? ─────────── -->
     <decisions>
         <name>Requires_Duplicate_Check</name>
         <label>Does this status trigger duplicate check?</label>
@@ -292,7 +304,26 @@
         </rules>
     </decisions>
 
-    <!-- ── STEP 6: QUERY FOR DUPLICATE VOUCHERS ON SAME PROPERTY ─────── -->
+    <decisions>
+        <name>Was_Duplicate_Found</name>
+        <label>Were duplicate vouchers found?</label>
+        <locationX>176</locationX>
+        <locationY>840</locationY>
+        <defaultConnectorLabel>No duplicates — allow</defaultConnectorLabel>
+        <rules>
+            <name>Duplicate_Found</name>
+            <conditionLogic>1</conditionLogic>
+            <conditions>
+                <leftValueReference>DuplicateVouchers</leftValueReference>
+                <operator>IsNull</operator>
+                <rightValue><booleanValue>false</booleanValue></rightValue>
+            </conditions>
+            <connector><targetReference>Block_Duplicate_Voucher</targetReference></connector>
+            <label>Yes — block and flag</label>
+        </rules>
+    </decisions>
+
+    <!-- ── RECORD LOOKUPS ────────────────────────────────────────────────── -->
     <recordLookups>
         <name>Check_Duplicate_By_Property</name>
         <label>Query: Duplicate vouchers on same Homeowner_Property__c</label>
@@ -329,59 +360,13 @@
         <queriedFields>Status__c</queriedFields>
     </recordLookups>
 
-    <!-- ── STEP 7: WAS A DUPLICATE FOUND? ────────────────────────────── -->
-    <decisions>
-        <name>Was_Duplicate_Found</name>
-        <label>Were duplicate vouchers found?</label>
-        <locationX>176</locationX>
-        <locationY>840</locationY>
-        <defaultConnectorLabel>No duplicates — allow</defaultConnectorLabel>
-        <rules>
-            <name>Duplicate_Found</name>
-            <conditionLogic>1</conditionLogic>
-            <conditions>
-                <leftValueReference>DuplicateVouchers</leftValueReference>
-                <operator>IsNull</operator>
-                <rightValue><booleanValue>false</booleanValue></rightValue>
-            </conditions>
-            <connector><targetReference>Block_Duplicate_Voucher</targetReference></connector>
-            <label>Yes — block and flag</label>
-        </rules>
-    </decisions>
-
-    <!-- ── BLOCKS ──────────────────────────────────────────────────────── -->
-    <customErrors>
-        <name>Block_No_Homeowner</name>
-        <label>Block — Homeowner Contact Required</label>
-        <locationX>440</locationX>
-        <locationY>240</locationY>
-        <customErrorMessages>
-            <errorMessage>A homeowner contact must be assigned before this voucher can advance to {!$Record.Status__c}. The builder account (Builder_Account__c) identifies the sponsor. The homeowner contact (Contact__c) identifies the claimant. Both are required for this status. Assign a Contact and try again.</errorMessage>
-            <isFieldError>true</isFieldError>
-            <fieldSelection>Contact__c</fieldSelection>
-        </customErrorMessages>
-    </customErrors>
-
-    <customErrors>
-        <name>Block_No_Lot</name>
-        <label>Block — Lot or Property or Address Required</label>
-        <locationX>440</locationX>
-        <locationY>480</locationY>
-        <customErrorMessages>
-            <errorMessage>A property address, homeowner property, or lot must be linked before this voucher can advance to {!$Record.Status__c}. The one-voucher-per-lot rule cannot be enforced without an address. Link Homeowner_Property__c or populate the address key and try again.</errorMessage>
-            <isFieldError>true</isFieldError>
-            <fieldSelection>Homeowner_Property__c</fieldSelection>
-        </customErrorMessages>
-    </customErrors>
-
-    <customErrors>
-        <name>Block_Duplicate_Voucher</name>
-        <label>Block — Duplicate Voucher Detected</label>
-        <locationX>440</locationX>
-        <locationY>840</locationY>
-        <customErrorMessages>
-            <errorMessage>A duplicate Lennar grilling island voucher already exists for this property or homeowner. Only one voucher per lot/address is allowed. This voucher has been flagged for review. Do not apply a quote credit until the duplicate is reviewed and resolved. Contact your manager to approve an exception.</errorMessage>
-            <isFieldError>false</isFieldError>
-        </customErrorMessages>
-    </customErrors>
+    <!-- ── VARIABLES ──────────────────────────────────────────────────── -->
+    <variables>
+        <name>DuplicateVouchers</name>
+        <dataType>SObject</dataType>
+        <isCollection>true</isCollection>
+        <isInput>false</isInput>
+        <isOutput>false</isOutput>
+        <objectType>Voucher__c</objectType>
+    </variables>
 </Flow>
