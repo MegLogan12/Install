@@ -13,8 +13,8 @@
 
         STATUS GATE RULES (per spec):
         ─────────────────────────────────────────────────────────────────
-        Draft, Active           → no Contact or Lot required
-        Submitted               → Contact required (unless claim flow creates it)
+        Draft, Active,
+        Submitted               → no Contact or Lot required (claim flow handles submission)
         Validated, Reserved,
         Applied to Quote,
         Contract Signed,
@@ -109,12 +109,7 @@
         <defaultConnectorLabel>No — Draft/Active/Expired/Voided — exit</defaultConnectorLabel>
         <rules>
             <name>Contact_Required_Status</name>
-            <conditionLogic>1 OR 2 OR 3 OR 4 OR 5 OR 6 OR 7 OR 8 OR 9 OR 10</conditionLogic>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Submitted</stringValue></rightValue>
-            </conditions>
+            <conditionLogic>1 OR 2 OR 3 OR 4 OR 5 OR 6 OR 7 OR 8 OR 9</conditionLogic>
             <conditions>
                 <leftValueReference>$Record.Status__c</leftValueReference>
                 <operator>EqualTo</operator>
