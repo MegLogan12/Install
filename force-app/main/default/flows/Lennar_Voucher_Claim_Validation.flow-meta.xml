@@ -71,7 +71,7 @@
         <locationX>440</locationX>
         <locationY>240</locationY>
         <customErrorMessages>
-            <errorMessage>A homeowner contact must be assigned before this voucher can advance to {!$Record.Status__c}. The builder account (Builder_Account__c) identifies the sponsor. The homeowner contact (Contact__c) identifies the claimant. Both are required for this status. Assign a Contact and try again.</errorMessage>
+            <errorMessage>A homeowner Contact must be assigned before this voucher can advance to {!$Record.Status__c}. Assign Contact__c and try again.</errorMessage>
             <isFieldError>true</isFieldError>
             <fieldSelection>Contact__c</fieldSelection>
         </customErrorMessages>
@@ -83,7 +83,7 @@
         <locationX>440</locationX>
         <locationY>480</locationY>
         <customErrorMessages>
-            <errorMessage>A property address, homeowner property, or lot must be linked before this voucher can advance to {!$Record.Status__c}. The one-voucher-per-lot rule cannot be enforced without an address. Link Homeowner_Property__c or populate the address key and try again.</errorMessage>
+            <errorMessage>A property or lot must be linked before this voucher can advance to {!$Record.Status__c}. Set Homeowner_Property__c or populate the address key and try again.</errorMessage>
             <isFieldError>true</isFieldError>
             <fieldSelection>Homeowner_Property__c</fieldSelection>
         </customErrorMessages>
@@ -95,7 +95,7 @@
         <locationX>440</locationX>
         <locationY>840</locationY>
         <customErrorMessages>
-            <errorMessage>A duplicate Lennar grilling island voucher already exists for this property or homeowner. Only one voucher per lot/address is allowed. This voucher has been flagged for review. Do not apply a quote credit until the duplicate is reviewed and resolved. Contact your manager to approve an exception.</errorMessage>
+            <errorMessage>A duplicate Lennar grilling island voucher already exists for this property. Only one voucher per lot is allowed. Do not apply a quote credit until the duplicate is resolved. Contact your manager to approve an exception.</errorMessage>
             <isFieldError>false</isFieldError>
         </customErrorMessages>
     </customErrors>

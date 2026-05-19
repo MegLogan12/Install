@@ -298,12 +298,12 @@
         <filters>
             <field>Name</field>
             <operator>EqualTo</operator>
-            <rightValue><stringValue>Standard Grilling Island</stringValue></rightValue>
+            <value><stringValue>Standard Grilling Island</stringValue></value>
         </filters>
         <filters>
             <field>IsActive</field>
             <operator>EqualTo</operator>
-            <rightValue><booleanValue>true</booleanValue></rightValue>
+            <value><booleanValue>true</booleanValue></value>
         </filters>
         <getFirstRecordOnly>true</getFirstRecordOnly>
         <object>PricebookEntry</object>
