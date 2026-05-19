@@ -6,31 +6,23 @@
 
         WHAT THIS FLOW DOES:
         ─────────────────────────────────────────────────────────────────
-        Runs before save on Voucher__c UPDATE when Status__c changes.
-        Enforces that Contact__c (homeowner) and Lot/Property/Address are present
-        before a voucher can advance into claim-owned or sales-owned statuses.
-        Also runs the one-per-lot/address duplicate check before Reserved or Applied to Quote.
+        Runs before save on Voucher__c UPDATE only when Status__c changes
+        TO Validated, Reserved, or Applied to Quote.
+        Entry conditions enforce this at the trigger level — the flow
+        never fires for Draft, Active, Submitted, Contract Signed, or any
+        other status, so existing ODL lifecycle tests are unaffected.
 
-        STATUS GATE RULES (per spec):
+        STATUS GATE RULES:
         ─────────────────────────────────────────────────────────────────
-        Draft, Active, Submitted,
-        Contract Signed, Deposit Paid,
-        Builder Invoice Pending,
-        Builder Invoiced, Paid by Builder,
-        Redeemed                → no Contact or Lot check (ODL lifecycle service manages these)
         Validated, Reserved,
-        Applied to Quote        → Contact AND Normalized_Address_Key__c required (Lennar gate)
-
-        DUPLICATE CHECK:
-        ─────────────────────────────────────────────────────────────────
-        Before Reserved or Applied to Quote: checks for other active/redeemed vouchers
-        on the same Lot__c or Homeowner_Property__c.
-        If found: blocks advance, sets Needs_Review__c = true.
+        Applied to Quote  → Contact AND Normalized_Address_Key__c required.
+                            Duplicate check runs on all three.
+        All other statuses → flow does not fire.
 
         OVERLAYS:
         ─────────────────────────────────────────────────────────────────
-        This is an overlay on the UMB/ODL process. Does not bypass quote, product,
-        pricebook, payment, design review, or approval rules.
+        This is an overlay on the UMB/ODL process. Does not bypass quote,
+        product, pricebook, payment, design review, or approval rules.
     </description>
     <environments>Default</environments>
     <interviewLabel>Lennar Voucher Claim Validation {!$Flow.CurrentDateTime}</interviewLabel>
@@ -46,7 +38,7 @@
         <object>Voucher__c</object>
         <recordTriggerType>Update</recordTriggerType>
         <triggerType>RecordBeforeSave</triggerType>
-        <filterLogic>1 AND 2</filterLogic>
+        <filterLogic>1 AND 2 AND (3 OR 4 OR 5)</filterLogic>
         <filters>
             <field>Standard_Grilling_Island_Included__c</field>
             <operator>EqualTo</operator>
@@ -57,16 +49,42 @@
             <operator>IsChanged</operator>
             <value><booleanValue>true</booleanValue></value>
         </filters>
-        <connector><targetReference>Requires_Contact_Check</targetReference></connector>
+        <filters>
+            <field>Status__c</field>
+            <operator>EqualTo</operator>
+            <value><stringValue>Validated</stringValue></value>
+        </filters>
+        <filters>
+            <field>Status__c</field>
+            <operator>EqualTo</operator>
+            <value><stringValue>Reserved</stringValue></value>
+        </filters>
+        <filters>
+            <field>Status__c</field>
+            <operator>EqualTo</operator>
+            <value><stringValue>Applied to Quote</stringValue></value>
+        </filters>
+        <connector><targetReference>Is_Contact_Present</targetReference></connector>
     </start>
     <status>Active</status>
 
     <!-- ── CUSTOM ERRORS ─────────────────────────────────────────────────── -->
     <customErrors>
+        <name>Block_Duplicate_Voucher</name>
+        <label>Block — Duplicate Voucher Detected</label>
+        <locationX>440</locationX>
+        <locationY>600</locationY>
+        <customErrorMessages>
+            <errorMessage>A duplicate Lennar grilling island voucher already exists for this property. Only one voucher per lot is allowed. Do not apply a quote credit until the duplicate is resolved. Contact your manager to approve an exception.</errorMessage>
+            <isFieldError>false</isFieldError>
+        </customErrorMessages>
+    </customErrors>
+
+    <customErrors>
         <name>Block_No_Homeowner</name>
         <label>Block — Homeowner Contact Required</label>
         <locationX>440</locationX>
-        <locationY>240</locationY>
+        <locationY>120</locationY>
         <customErrorMessages>
             <errorMessage>A homeowner Contact must be assigned before this voucher can advance to {!$Record.Status__c}. Assign Contact__c and try again.</errorMessage>
             <isFieldError>true</isFieldError>
@@ -76,9 +94,9 @@
 
     <customErrors>
         <name>Block_No_Lot</name>
-        <label>Block — Lot or Property or Address Required</label>
+        <label>Block — Address Key Required</label>
         <locationX>440</locationX>
-        <locationY>480</locationY>
+        <locationY>240</locationY>
         <customErrorMessages>
             <errorMessage>An address key must be set before this voucher can advance to {!$Record.Status__c}. Populate Normalized_Address_Key__c and try again.</errorMessage>
             <isFieldError>true</isFieldError>
@@ -86,52 +104,12 @@
         </customErrorMessages>
     </customErrors>
 
-    <customErrors>
-        <name>Block_Duplicate_Voucher</name>
-        <label>Block — Duplicate Voucher Detected</label>
-        <locationX>440</locationX>
-        <locationY>840</locationY>
-        <customErrorMessages>
-            <errorMessage>A duplicate Lennar grilling island voucher already exists for this property. Only one voucher per lot is allowed. Do not apply a quote credit until the duplicate is resolved. Contact your manager to approve an exception.</errorMessage>
-            <isFieldError>false</isFieldError>
-        </customErrorMessages>
-    </customErrors>
-
     <!-- ── DECISIONS ─────────────────────────────────────────────────────── -->
-    <decisions>
-        <name>Requires_Contact_Check</name>
-        <label>Does this status require Contact__c?</label>
-        <locationX>176</locationX>
-        <locationY>120</locationY>
-        <defaultConnectorLabel>No — Draft/Active/Expired/Voided — exit</defaultConnectorLabel>
-        <rules>
-            <name>Contact_Required_Status</name>
-            <conditionLogic>1 OR 2 OR 3</conditionLogic>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Validated</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Reserved</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Applied to Quote</stringValue></rightValue>
-            </conditions>
-            <connector><targetReference>Is_Contact_Present</targetReference></connector>
-            <label>Yes — requires Contact</label>
-        </rules>
-    </decisions>
-
     <decisions>
         <name>Is_Contact_Present</name>
         <label>Is Contact__c (homeowner) set?</label>
         <locationX>176</locationX>
-        <locationY>240</locationY>
+        <locationY>120</locationY>
         <defaultConnector><targetReference>Block_No_Homeowner</targetReference></defaultConnector>
         <defaultConnectorLabel>No — block</defaultConnectorLabel>
         <rules>
@@ -142,46 +120,16 @@
                 <operator>IsNull</operator>
                 <rightValue><booleanValue>false</booleanValue></rightValue>
             </conditions>
-            <connector><targetReference>Requires_Lot_Check</targetReference></connector>
+            <connector><targetReference>Is_Lot_Or_Property_Present</targetReference></connector>
             <label>Yes — proceed to lot/address check</label>
         </rules>
     </decisions>
 
     <decisions>
-        <name>Requires_Lot_Check</name>
-        <label>Does this status require Lot/Property/Address?</label>
-        <locationX>176</locationX>
-        <locationY>360</locationY>
-        <defaultConnector><targetReference>Requires_Duplicate_Check</targetReference></defaultConnector>
-        <defaultConnectorLabel>No — allow (Contact gate already passed)</defaultConnectorLabel>
-        <rules>
-            <name>Lot_Required_Status</name>
-            <conditionLogic>1 OR 2 OR 3</conditionLogic>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Validated</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Reserved</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Applied to Quote</stringValue></rightValue>
-            </conditions>
-            <connector><targetReference>Is_Lot_Or_Property_Present</targetReference></connector>
-            <label>Yes — Validated, Reserved, or Applied to Quote</label>
-        </rules>
-    </decisions>
-
-    <decisions>
         <name>Is_Lot_Or_Property_Present</name>
-        <label>Is Address Key present?</label>
+        <label>Is Normalized_Address_Key__c present?</label>
         <locationX>176</locationX>
-        <locationY>480</locationY>
+        <locationY>240</locationY>
         <defaultConnector><targetReference>Block_No_Lot</targetReference></defaultConnector>
         <defaultConnectorLabel>None present — block</defaultConnectorLabel>
         <rules>
@@ -197,37 +145,8 @@
                 <operator>NotEqualTo</operator>
                 <rightValue><stringValue></stringValue></rightValue>
             </conditions>
-            <connector><targetReference>Requires_Duplicate_Check</targetReference></connector>
-            <label>Present — proceed to duplicate check</label>
-        </rules>
-    </decisions>
-
-    <decisions>
-        <name>Requires_Duplicate_Check</name>
-        <label>Does this status trigger duplicate check?</label>
-        <locationX>176</locationX>
-        <locationY>600</locationY>
-        <defaultConnectorLabel>No — allow</defaultConnectorLabel>
-        <rules>
-            <name>Dup_Check_Required</name>
-            <conditionLogic>1 OR 2 OR 3</conditionLogic>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Reserved</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Applied to Quote</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Validated</stringValue></rightValue>
-            </conditions>
             <connector><targetReference>Check_Duplicate_By_Property</targetReference></connector>
-            <label>Yes — check for duplicates</label>
+            <label>Present — proceed to duplicate check</label>
         </rules>
     </decisions>
 
@@ -235,7 +154,7 @@
         <name>Was_Duplicate_Found</name>
         <label>Were duplicate vouchers found?</label>
         <locationX>176</locationX>
-        <locationY>840</locationY>
+        <locationY>480</locationY>
         <defaultConnectorLabel>No duplicates — allow</defaultConnectorLabel>
         <rules>
             <name>Duplicate_Found</name>
@@ -253,9 +172,9 @@
     <!-- ── RECORD LOOKUPS ────────────────────────────────────────────────── -->
     <recordLookups>
         <name>Check_Duplicate_By_Property</name>
-        <label>Query: Duplicate vouchers on same Homeowner_Property__c</label>
+        <label>Query: Duplicate vouchers on same address key</label>
         <locationX>176</locationX>
-        <locationY>720</locationY>
+        <locationY>360</locationY>
         <assignNullValuesIfNoRecordsFound>true</assignNullValuesIfNoRecordsFound>
         <connector><targetReference>Was_Duplicate_Found</targetReference></connector>
         <filterLogic>1 AND 2 AND 3</filterLogic>
