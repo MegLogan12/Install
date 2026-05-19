@@ -323,12 +323,12 @@
         <filters>
             <field>Name</field>
             <operator>Contains</operator>
-            <rightValue><stringValue>Charlotte</stringValue></rightValue>
+            <value><stringValue>Charlotte</stringValue></value>
         </filters>
         <filters>
             <field>Type</field>
             <operator>EqualTo</operator>
-            <rightValue><stringValue>Builder Market</stringValue></rightValue>
+            <value><stringValue>Builder Market</stringValue></value>
         </filters>
         <getFirstRecordOnly>true</getFirstRecordOnly>
         <object>Account</object>
@@ -348,12 +348,12 @@
         <filters>
             <field>Name</field>
             <operator>Contains</operator>
-            <rightValue><stringValue>Columbia</stringValue></rightValue>
+            <value><stringValue>Columbia</stringValue></value>
         </filters>
         <filters>
             <field>Type</field>
             <operator>EqualTo</operator>
-            <rightValue><stringValue>Builder Market</stringValue></rightValue>
+            <value><stringValue>Builder Market</stringValue></value>
         </filters>
         <getFirstRecordOnly>true</getFirstRecordOnly>
         <object>Account</object>
@@ -373,12 +373,12 @@
         <filters>
             <field>Name</field>
             <operator>Contains</operator>
-            <rightValue><stringValue>Greenville</stringValue></rightValue>
+            <value><stringValue>Greenville</stringValue></value>
         </filters>
         <filters>
             <field>Type</field>
             <operator>EqualTo</operator>
-            <rightValue><stringValue>Builder Market</stringValue></rightValue>
+            <value><stringValue>Builder Market</stringValue></value>
         </filters>
         <getFirstRecordOnly>true</getFirstRecordOnly>
         <object>Account</object>
@@ -398,12 +398,12 @@
         <filters>
             <field>Name</field>
             <operator>Contains</operator>
-            <rightValue><stringValue>Triad</stringValue></rightValue>
+            <value><stringValue>Triad</stringValue></value>
         </filters>
         <filters>
             <field>Type</field>
             <operator>EqualTo</operator>
-            <rightValue><stringValue>Builder Market</stringValue></rightValue>
+            <value><stringValue>Builder Market</stringValue></value>
         </filters>
         <getFirstRecordOnly>true</getFirstRecordOnly>
         <object>Account</object>
