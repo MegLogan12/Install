@@ -127,11 +127,11 @@
             </value>
         </assignmentItems>
         <assignmentItems>
-            <!-- Sponsor pays — Lennar covers the cost -->
+            <!-- Sponsor pays — Lennar (Builder) covers the cost -->
             <assignToReference>$Record.Sponsor_Payment_Responsibility__c</assignToReference>
             <operator>Assign</operator>
             <value>
-                <stringValue>Lennar</stringValue>
+                <stringValue>Builder Invoiced</stringValue>
             </value>
         </assignmentItems>
         <assignmentItems>

@@ -490,14 +490,13 @@ async function cmdAuditODL() {
   // ── 9. LABEL SCAN FOR LEGACY UMB TERMS ──────────────────────────────
   process.stdout.write(gray('  Scanning labels for legacy UMB/Studio terms… '));
   const legacyLabels = [];
-  const legacyTerms  = ['umb', 'the studio', 'custom build', 'funding source', 'upgrademybackyard'];
-  const goodTerms    = ['upgrademybackyard', 'design build', 'sponsor payment responsibility'];
+  // Match whole words only to avoid "number" matching "umb", etc.
+  const legacyRegex = /\b(umb|the studio|custom build|funding source)\b/i;
   for (const d of [voucherD, oppD, quoteD, woD, acctD, productD]) {
     if (!d.ok) continue;
     for (const f of (d.fields||[])) {
-      const lbl = (f.label||'').toLowerCase();
-      const isLegacy = legacyTerms.some(t => lbl.includes(t)) && !goodTerms.includes(lbl);
-      if (isLegacy) legacyLabels.push({ object: d.label || '?', field: f.name, label: f.label });
+      const lbl = (f.label||'');
+      if (legacyRegex.test(lbl)) legacyLabels.push({ object: d.label || '?', field: f.name, label: lbl });
     }
   }
   // Check tabs/apps for UMB labels
