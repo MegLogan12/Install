@@ -103,67 +103,92 @@ async function cmdConnect() {
   const instanceUrl = instanceRaw || defaultInstance;
   const cleanInstance = instanceUrl.startsWith('http') ? instanceUrl : `https://${instanceUrl}`;
 
-  const username = await prompt('  Username: ');
-  if (!username) { console.log(red('  Username is required.')); process.exit(1); }
-
-  const password = await promptSecret('  Password: ');
-  const securityToken = await promptSecret('  Security token (leave blank if IP is trusted): ');
-
-  console.log(gray('\n  Authenticating…'));
-
-  // Use SOAP login — no Connected App or client ID required
-  const soapBody = `<?xml version="1.0" encoding="utf-8"?>
-<env:Envelope xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:env="http://schemas.xmlsoap.org/soap/envelope/">
-  <env:Body>
-    <n1:login xmlns:n1="urn:partner.soap.sforce.com">
-      <n1:username>${username}</n1:username>
-      <n1:password>${password + securityToken}</n1:password>
-    </n1:login>
-  </env:Body>
-</env:Envelope>`;
-
-  let tokenData;
+  // Try sf CLI first — it's already installed if Codex/Salesforce CLI works
   try {
-    const res = await fetch(`${cleanInstance}/services/Soap/u/60.0`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/xml',
-        'SOAPAction': 'login',
-      },
-      body: soapBody,
-    });
-    const text = await res.text();
-    if (text.includes('INVALID_LOGIN') || text.includes('faultstring')) {
-      const match = text.match(/<faultstring>(.*?)<\/faultstring>/);
-      throw new Error(match ? match[1] : 'Invalid login');
-    }
-    const sessionMatch = text.match(/<sessionId>(.*?)<\/sessionId>/);
-    const urlMatch = text.match(/<serverUrl>(.*?)<\/serverUrl>/);
-    if (!sessionMatch || !urlMatch) throw new Error('Unexpected response from Salesforce');
-    const serverUrl = urlMatch[1];
-    const instanceUrlParsed = new URL(serverUrl).origin;
-    tokenData = { access_token: sessionMatch[1], instance_url: instanceUrlParsed };
-  } catch (err) {
-    console.log(red(`\n  Authentication failed: ${err.message}`));
-    console.log(gray('  Tip: password + security token must be concatenated with no space.'));
-    process.exit(1);
+    execSync('sf --version', { stdio: 'ignore' });
+    console.log(gray('  Salesforce CLI detected — opening browser to log in…\n'));
+    execSync(`sf org login web --instance-url ${cleanInstance} --alias dispatch`, { stdio: 'inherit' });
+    const raw = execSync('sf org display --target-org dispatch --json', { encoding: 'utf8' });
+    const info = JSON.parse(raw).result;
+    const cfg = loadConfig();
+    cfg.salesforce = {
+      instanceUrl: info.instanceUrl,
+      accessToken: info.accessToken,
+      username: info.username,
+      connectedAt: new Date().toISOString(),
+    };
+    saveConfig(cfg);
+    console.log(green(`\n  Connected as ${bold(info.username)}`));
+    console.log(gray(`  Instance : ${info.instanceUrl}`));
+    console.log(gray(`  Config   : ${CONFIG_FILE}\n`));
+    return;
+  } catch {
+    // sf CLI not available — fall through to browser OAuth flow
   }
 
-  const identity = { preferred_username: username };
+  // Browser OAuth flow — opens Salesforce login in browser, catches token on localhost
+  const CALLBACK_PORT = 1717;
+  const CLIENT_ID = 'PlatformCLI';
+  const redirectUri = `http://localhost:${CALLBACK_PORT}/callback`;
+  const authUrl = `${cleanInstance}/services/oauth2/authorize?response_type=token&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+
+  console.log(gray('  Opening Salesforce login in your browser…'));
+  console.log(gray(`  If it does not open, visit:\n  ${authUrl}\n`));
+
+  const open = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+  try { execSync(`${open} "${authUrl}"`); } catch {}
+
+  const tokenData = await new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      const html = `<html><body style="font-family:sans-serif;padding:2em">
+        <h2>Dispatch CLI</h2>
+        <p id="msg">Completing login…</p>
+        <script>
+          const hash = location.hash.slice(1);
+          if(hash){
+            fetch('/token?' + hash).then(()=>{ document.getElementById('msg').textContent='Connected! You can close this tab.'; });
+          } else {
+            document.getElementById('msg').textContent='No token received. Please try again.';
+          }
+        </script></body></html>`;
+
+      if (req.url.startsWith('/token?')) {
+        const params = new URLSearchParams(req.url.slice(7));
+        const accessToken = params.get('access_token');
+        const instanceUrlRaw = params.get('instance_url');
+        res.writeHead(200); res.end('ok');
+        server.close();
+        if (accessToken) resolve({ access_token: accessToken, instance_url: decodeURIComponent(instanceUrlRaw || cleanInstance) });
+        else reject(new Error('No access token in callback'));
+      } else {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(html);
+      }
+    });
+
+    server.listen(CALLBACK_PORT, () => {
+      console.log(gray(`  Waiting for login… (listening on port ${CALLBACK_PORT})`));
+    });
+
+    setTimeout(() => { server.close(); reject(new Error('Login timed out after 3 minutes')); }, 180000);
+  });
 
   const cfg = loadConfig();
   cfg.salesforce = {
     instanceUrl: tokenData.instance_url,
     accessToken: tokenData.access_token,
-    refreshToken: tokenData.refresh_token || null,
-    username: identity?.preferred_username || username,
+    username: null,
     connectedAt: new Date().toISOString(),
   };
-  saveConfig(cfg);
 
-  console.log(green(`\n  Connected as ${bold(cfg.salesforce.username)}`));
+  // Fetch username
+  try {
+    const info = await sfRequest(tokenData.instance_url, tokenData.access_token, '/services/oauth2/userinfo');
+    cfg.salesforce.username = info.preferred_username || info.email;
+  } catch {}
+
+  saveConfig(cfg);
+  console.log(green(`\n  Connected${cfg.salesforce.username ? ' as ' + bold(cfg.salesforce.username) : ''}`));
   console.log(gray(`  Instance : ${cfg.salesforce.instanceUrl}`));
   console.log(gray(`  Config   : ${CONFIG_FILE}\n`));
 }
