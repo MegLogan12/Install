@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Normalized_Address_Key__c</fullName>
+    <label>Normalized Address Key</label>
+    <description>Lowercased, trimmed, punctuation-stripped composite of street number + street name + zip code. Used for duplicate voucher detection when Lot__c and Homeowner_Property__c are not available. Auto-populated by flow at claim time. Do not edit manually.</description>
+    <type>Text</type>
+    <length>255</length>
+    <externalId>false</externalId>
+    <unique>false</unique>
+    <caseSensitive>false</caseSensitive>
+    <trackHistory>false</trackHistory>
+    <trackTrending>false</trackTrending>
+</CustomField>

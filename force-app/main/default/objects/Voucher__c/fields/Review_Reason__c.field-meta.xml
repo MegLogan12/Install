@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Review_Reason__c</fullName>
+    <label>Review Reason</label>
+    <description>Auto-populated when Needs_Review__c is set. Describes why the voucher requires review: ambiguous builder account match, duplicate lot/property detected, invalid claim data, or other exception. Do not clear without resolving the issue.</description>
+    <type>LongTextArea</type>
+    <length>32768</length>
+    <visibleLines>3</visibleLines>
+    <trackHistory>false</trackHistory>
+    <trackTrending>false</trackTrending>
+</CustomField>

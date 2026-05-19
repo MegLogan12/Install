@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Gross_Grill_Price__c</fullName>
+    <label>Gross Grill Price</label>
+    <description>Full list price of the grilling island product selected by the homeowner (Standard or Deluxe). Populated from the quote line when voucher is applied to quote.</description>
+    <type>Currency</type>
+    <precision>18</precision>
+    <scale>2</scale>
+    <trackHistory>false</trackHistory>
+    <trackTrending>false</trackTrending>
+</CustomField>

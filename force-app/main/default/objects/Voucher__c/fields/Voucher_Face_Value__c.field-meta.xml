@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Voucher_Face_Value__c</fullName>
+    <label>Voucher Face Value</label>
+    <description>The Standard Grilling Island value this voucher covers. This is the cap — voucher never covers more than this amount regardless of product selected. Set from pricebook at time of issuance.</description>
+    <type>Currency</type>
+    <precision>18</precision>
+    <scale>2</scale>
+    <trackHistory>true</trackHistory>
+    <trackTrending>false</trackTrending>
+</CustomField>

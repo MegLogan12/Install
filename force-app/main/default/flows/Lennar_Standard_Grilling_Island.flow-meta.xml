@@ -2,35 +2,51 @@
 <Flow xmlns="http://soap.sforce.com/2006/04/metadata">
     <apiVersion>60.0</apiVersion>
     <description>
-        Lennar Standard Grilling Island — Voucher Creation Automation.
+        PHASE 3 — Campaign-Created Voucher Setup (Builder / Sponsor Side).
 
-        DUAL-SIDED STRUCTURE:
-        ─────────────────────
-        Builder / Sponsor side  → Builder_Account__c
-          - Identifies the Lennar division or builder responsible for the program.
-          - Controls eligibility, funding, reimbursement, and builder-side reporting.
-          - Set automatically on creation by looking up the Lennar Homes account
-            from the campaign, or defaulting to the Lennar Homes parent.
-          - Sponsor_Payment_Responsibility__c = Builder Invoiced (Lennar pays).
+        WHAT THIS FLOW DOES:
+        ─────────────────────────────────────────────────────────────────
+        Runs before save on Voucher__c CREATE when a Campaign is linked.
+        Sets grilling island fields and attempts a confident builder account match.
 
-        Homeowner / Claimant side → Contact__c
-          - Identifies the homeowner who claims and redeems the voucher.
-          - Controls claim, quote, invoice, upgrade decision, and redemption.
-          - NOT set by this flow. Set when homeowner claims via web form or manually.
-          - A separate validation flow (Lennar_Voucher_Claim_Validation) enforces
-            Contact__c is present before Status can advance past Active.
+        WHAT THIS FLOW DOES NOT DO:
+        ─────────────────────────────────────────────────────────────────
+        - Does NOT set Contact__c. That is the homeowner claim step (Phase 4).
+        - Does NOT set Lot__c or Homeowner_Property__c. Those are the claim/address step.
+        - Does NOT require lot/property/address at creation.
+        - Does NOT guess the builder account when the match is ambiguous.
+        - Does NOT default to Lennar Homes parent unless business-approved.
+        - Does NOT apply a quote credit. That is Phase 6.
 
-        Marketing Cloud may run the homeowner campaign/journey.
-        Salesforce Voucher__c remains the source of truth for both sides.
+        BUILDER ACCOUNT MATCHING PRIORITY (per spec):
+        ─────────────────────────────────────────────────────────────────
+        1. If Builder_Account__c is already set → leave it. Trust the caller.
+        2. If campaign name contains a market keyword → match to that Lennar market account.
+        3. If no confident market match → set Needs_Review__c = true, leave Builder_Account__c blank.
+           DO NOT silently set to Lennar Homes parent.
+
+        FIELDS SET BY THIS FLOW:
+        ─────────────────────────────────────────────────────────────────
+        - Standard_Grilling_Island_Included__c = true
+        - Voucher_Type__c = Standard Grilling Island
+        - Sponsor_Payment_Responsibility__c = Builder Invoiced
+        - Expiration_Date__c = TODAY() + 365
+        - Upsell_Eligible__c = true
+        - Builder_Account__c = matched Lennar division (if confident)
+        - Needs_Review__c = true + Review_Reason__c (if builder match ambiguous)
+
+        OVERLAYS:
+        ─────────────────────────────────────────────────────────────────
+        This flow is an overlay on the existing UpgradeMyBackyard / Outdoor Living process.
+        All current ODL/UMB rules still apply. This flow only sets voucher-specific fields.
+        It does not bypass product eligibility, pricebook, quote, approval, or payment rules.
     </description>
     <environments>Default</environments>
     <interviewLabel>Lennar Standard Grilling Island {!$Flow.CurrentDateTime}</interviewLabel>
     <label>Lennar Standard Grilling Island</label>
     <processMetadataValues>
         <name>BuilderType</name>
-        <value>
-            <stringValue>LightningFlowBuilder</stringValue>
-        </value>
+        <value><stringValue>LightningFlowBuilder</stringValue></value>
     </processMetadataValues>
     <processType>AutoLaunchedFlow</processType>
     <start>
@@ -43,17 +59,13 @@
         <filters>
             <field>Campaign__c</field>
             <operator>IsNull</operator>
-            <value>
-                <booleanValue>false</booleanValue>
-            </value>
+            <value><booleanValue>false</booleanValue></value>
         </filters>
-        <connector>
-            <targetReference>Get_Campaign</targetReference>
-        </connector>
+        <connector><targetReference>Get_Campaign</targetReference></connector>
     </start>
     <status>Active</status>
 
-    <!-- ── VARIABLES ────────────────────────────────────────────────────── -->
+    <!-- ── VARIABLES ──────────────────────────────────────────────────── -->
     <variables>
         <name>CampaignRecord</name>
         <dataType>SObject</dataType>
@@ -62,40 +74,47 @@
         <isOutput>false</isOutput>
         <objectType>Campaign</objectType>
     </variables>
-
     <variables>
-        <name>BuilderAccount</name>
+        <name>MatchedBuilderAccount</name>
         <dataType>SObject</dataType>
         <isCollection>false</isCollection>
         <isInput>false</isInput>
         <isOutput>false</isOutput>
         <objectType>Account</objectType>
     </variables>
+    <variables>
+        <name>MarketKeyword</name>
+        <dataType>String</dataType>
+        <isCollection>false</isCollection>
+        <isInput>false</isInput>
+        <isOutput>false</isOutput>
+    </variables>
 
-    <!-- ── FORMULAS ─────────────────────────────────────────────────────── -->
+    <!-- ── FORMULAS ───────────────────────────────────────────────────── -->
     <formulas>
         <name>ExpirationDate</name>
         <dataType>Date</dataType>
         <expression>TODAY() + 365</expression>
     </formulas>
+    <formulas>
+        <name>CampaignNameUpper</name>
+        <dataType>String</dataType>
+        <expression>UPPER({!CampaignRecord.Name})</expression>
+    </formulas>
 
-    <!-- ── STEP 1: GET CAMPAIGN ──────────────────────────────────────────── -->
+    <!-- ── STEP 1: GET CAMPAIGN ───────────────────────────────────────── -->
     <recordLookups>
         <name>Get_Campaign</name>
         <label>Get Campaign</label>
         <locationX>176</locationX>
         <locationY>120</locationY>
         <assignNullValuesIfNoRecordsFound>false</assignNullValuesIfNoRecordsFound>
-        <connector>
-            <targetReference>Is_Lennar_Campaign</targetReference>
-        </connector>
+        <connector><targetReference>Is_Lennar_Campaign</targetReference></connector>
         <filterLogic>1</filterLogic>
         <filters>
             <field>Id</field>
             <operator>EqualTo</operator>
-            <value>
-                <elementReference>$Record.Campaign__c</elementReference>
-            </value>
+            <value><elementReference>$Record.Campaign__c</elementReference></value>
         </filters>
         <getFirstRecordOnly>true</getFirstRecordOnly>
         <object>Campaign</object>
@@ -105,193 +124,332 @@
         <queriedFields>Type</queriedFields>
     </recordLookups>
 
-    <!-- ── STEP 2: IS THIS A LENNAR CAMPAIGN? ───────────────────────────── -->
+    <!-- ── STEP 2: IS THIS A LENNAR/GRILLING CAMPAIGN? ───────────────── -->
     <decisions>
         <name>Is_Lennar_Campaign</name>
         <label>Is Lennar / Grilling Island Campaign?</label>
         <locationX>176</locationX>
         <locationY>240</locationY>
-        <defaultConnectorLabel>Not Lennar — exit</defaultConnectorLabel>
+        <defaultConnectorLabel>Not Lennar — exit without changes</defaultConnectorLabel>
         <rules>
             <name>Yes_Lennar</name>
             <conditionLogic>1 OR 2 OR 3</conditionLogic>
             <conditions>
                 <leftValueReference>CampaignRecord.Name</leftValueReference>
                 <operator>Contains</operator>
-                <rightValue>
-                    <stringValue>Lennar</stringValue>
-                </rightValue>
+                <rightValue><stringValue>Lennar</stringValue></rightValue>
             </conditions>
             <conditions>
                 <leftValueReference>CampaignRecord.Name</leftValueReference>
                 <operator>Contains</operator>
-                <rightValue>
-                    <stringValue>Grilling Island</stringValue>
-                </rightValue>
+                <rightValue><stringValue>Grilling Island</stringValue></rightValue>
             </conditions>
             <conditions>
                 <leftValueReference>$Record.Voucher_Type__c</leftValueReference>
                 <operator>EqualTo</operator>
-                <rightValue>
-                    <stringValue>Standard Grilling Island</stringValue>
-                </rightValue>
+                <rightValue><stringValue>Standard Grilling Island</stringValue></rightValue>
             </conditions>
-            <connector>
-                <targetReference>Set_Grilling_Fields</targetReference>
-            </connector>
+            <connector><targetReference>Set_Grilling_Fields</targetReference></connector>
             <label>Yes — Lennar / Grilling Island</label>
         </rules>
     </decisions>
 
-    <!-- ── STEP 3: SET GRILLING ISLAND FIELDS (builder side) ────────────── -->
+    <!-- ── STEP 3: SET GRILLING ISLAND FIELDS ────────────────────────── -->
     <assignments>
         <name>Set_Grilling_Fields</name>
-        <label>Set Grilling Island Fields</label>
+        <label>Set Grilling Island Fields (builder / sponsor side)</label>
         <locationX>176</locationX>
         <locationY>360</locationY>
         <assignmentItems>
-            <!-- Grilling island is included with this voucher -->
             <assignToReference>$Record.Standard_Grilling_Island_Included__c</assignToReference>
             <operator>Assign</operator>
-            <value>
-                <booleanValue>true</booleanValue>
-            </value>
+            <value><booleanValue>true</booleanValue></value>
         </assignmentItems>
         <assignmentItems>
-            <!-- Builder (Lennar) is financially responsible — not LOVING, not homeowner -->
+            <assignToReference>$Record.Voucher_Type__c</assignToReference>
+            <operator>Assign</operator>
+            <value><stringValue>Standard Grilling Island</stringValue></value>
+        </assignmentItems>
+        <assignmentItems>
             <assignToReference>$Record.Sponsor_Payment_Responsibility__c</assignToReference>
             <operator>Assign</operator>
-            <value>
-                <stringValue>Builder Invoiced</stringValue>
-            </value>
+            <value><stringValue>Builder Invoiced</stringValue></value>
         </assignmentItems>
         <assignmentItems>
-            <!-- Voucher valid for 1 year from issuance -->
             <assignToReference>$Record.Expiration_Date__c</assignToReference>
             <operator>Assign</operator>
-            <value>
-                <elementReference>ExpirationDate</elementReference>
-            </value>
+            <value><elementReference>ExpirationDate</elementReference></value>
         </assignmentItems>
         <assignmentItems>
-            <!-- Grilling island opens upsell conversation with homeowner -->
             <assignToReference>$Record.Upsell_Eligible__c</assignToReference>
             <operator>Assign</operator>
-            <value>
-                <booleanValue>true</booleanValue>
-            </value>
+            <value><booleanValue>true</booleanValue></value>
         </assignmentItems>
-        <connector>
-            <targetReference>Builder_Account_Already_Set</targetReference>
-        </connector>
+        <connector><targetReference>Builder_Account_Already_Set</targetReference></connector>
     </assignments>
 
-    <!-- ── STEP 4: DOES THE VOUCHER ALREADY HAVE A BUILDER ACCOUNT? ─────── -->
+    <!-- ── STEP 4: IS BUILDER ACCOUNT ALREADY SET? ───────────────────── -->
     <decisions>
         <name>Builder_Account_Already_Set</name>
-        <label>Builder Account already set?</label>
+        <label>Is Builder_Account__c already set?</label>
         <locationX>176</locationX>
         <locationY>480</locationY>
         <defaultConnector>
-            <targetReference>Lookup_Lennar_Builder_Account</targetReference>
+            <targetReference>Detect_Market_Charlotte</targetReference>
         </defaultConnector>
-        <defaultConnectorLabel>No — look up Lennar account</defaultConnectorLabel>
+        <defaultConnectorLabel>No — attempt market match</defaultConnectorLabel>
         <rules>
-            <name>Builder_Account_Set</name>
+            <name>Already_Set</name>
             <conditionLogic>1</conditionLogic>
             <conditions>
                 <leftValueReference>$Record.Builder_Account__c</leftValueReference>
                 <operator>IsNull</operator>
-                <rightValue>
-                    <booleanValue>false</booleanValue>
-                </rightValue>
+                <rightValue><booleanValue>false</booleanValue></rightValue>
             </conditions>
-            <label>Yes — already set, skip lookup</label>
+            <label>Yes — leave it, trust the caller</label>
         </rules>
     </decisions>
 
-    <!-- ── STEP 5: LOOK UP LENNAR BUILDER ACCOUNT ───────────────────────── -->
-    <!--
-        Attempts to find the Lennar division account by matching the campaign name
-        to the account name (e.g., "Charlotte" in campaign → "Lennar Homes – Charlotte").
-        Falls back to Lennar Homes parent if no division match.
-        Builder_Account__c is the SPONSORSHIP side. Contact__c is the HOMEOWNER side.
-        Do NOT merge these — they serve different business purposes.
-    -->
-    <recordLookups>
-        <name>Lookup_Lennar_Builder_Account</name>
-        <label>Look Up Lennar Builder Account</label>
+    <!-- ── STEP 5A: DOES CAMPAIGN NAME CONTAIN CHARLOTTE? ────────────── -->
+    <decisions>
+        <name>Detect_Market_Charlotte</name>
+        <label>Campaign contains Charlotte?</label>
         <locationX>176</locationX>
         <locationY>600</locationY>
+        <defaultConnector><targetReference>Detect_Market_Columbia</targetReference></defaultConnector>
+        <defaultConnectorLabel>No</defaultConnectorLabel>
+        <rules>
+            <name>Has_Charlotte</name>
+            <conditionLogic>1</conditionLogic>
+            <conditions>
+                <leftValueReference>CampaignRecord.Name</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>Charlotte</stringValue></rightValue>
+            </conditions>
+            <connector><targetReference>Lookup_Charlotte_Account</targetReference></connector>
+            <label>Yes — Charlotte</label>
+        </rules>
+    </decisions>
+
+    <!-- ── STEP 5B: COLUMBIA? ─────────────────────────────────────────── -->
+    <decisions>
+        <name>Detect_Market_Columbia</name>
+        <label>Campaign contains Columbia?</label>
+        <locationX>440</locationX>
+        <locationY>600</locationY>
+        <defaultConnector><targetReference>Detect_Market_Greenville</targetReference></defaultConnector>
+        <defaultConnectorLabel>No</defaultConnectorLabel>
+        <rules>
+            <name>Has_Columbia</name>
+            <conditionLogic>1</conditionLogic>
+            <conditions>
+                <leftValueReference>CampaignRecord.Name</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>Columbia</stringValue></rightValue>
+            </conditions>
+            <connector><targetReference>Lookup_Columbia_Account</targetReference></connector>
+            <label>Yes — Columbia</label>
+        </rules>
+    </decisions>
+
+    <!-- ── STEP 5C: GREENVILLE? ───────────────────────────────────────── -->
+    <decisions>
+        <name>Detect_Market_Greenville</name>
+        <label>Campaign contains Greenville?</label>
+        <locationX>704</locationX>
+        <locationY>600</locationY>
+        <defaultConnector><targetReference>Detect_Market_Triad</targetReference></defaultConnector>
+        <defaultConnectorLabel>No</defaultConnectorLabel>
+        <rules>
+            <name>Has_Greenville</name>
+            <conditionLogic>1</conditionLogic>
+            <conditions>
+                <leftValueReference>CampaignRecord.Name</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>Greenville</stringValue></rightValue>
+            </conditions>
+            <connector><targetReference>Lookup_Greenville_Account</targetReference></connector>
+            <label>Yes — Greenville</label>
+        </rules>
+    </decisions>
+
+    <!-- ── STEP 5D: TRIAD? ────────────────────────────────────────────── -->
+    <decisions>
+        <name>Detect_Market_Triad</name>
+        <label>Campaign contains Triad?</label>
+        <locationX>968</locationX>
+        <locationY>600</locationY>
+        <defaultConnector><targetReference>Flag_Ambiguous_Builder</targetReference></defaultConnector>
+        <defaultConnectorLabel>No match — ambiguous, flag for review</defaultConnectorLabel>
+        <rules>
+            <name>Has_Triad</name>
+            <conditionLogic>1</conditionLogic>
+            <conditions>
+                <leftValueReference>CampaignRecord.Name</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>Triad</stringValue></rightValue>
+            </conditions>
+            <connector><targetReference>Lookup_Triad_Account</targetReference></connector>
+            <label>Yes — Triad</label>
+        </rules>
+    </decisions>
+
+    <!-- ── LOOKUPS: MARKET-SPECIFIC LENNAR ACCOUNTS ───────────────────── -->
+    <recordLookups>
+        <name>Lookup_Charlotte_Account</name>
+        <label>Look Up Lennar Homes – Charlotte</label>
+        <locationX>176</locationX>
+        <locationY>720</locationY>
         <assignNullValuesIfNoRecordsFound>false</assignNullValuesIfNoRecordsFound>
-        <connector>
-            <targetReference>Did_We_Find_Builder_Account</targetReference>
-        </connector>
+        <connector><targetReference>Set_Matched_Builder_Account</targetReference></connector>
         <filterLogic>1 AND 2</filterLogic>
         <filters>
             <field>Name</field>
-            <operator>StartsWith</operator>
-            <rightValue>
-                <stringValue>Lennar Homes</stringValue>
-            </rightValue>
+            <operator>Contains</operator>
+            <rightValue><stringValue>Charlotte</stringValue></rightValue>
         </filters>
         <filters>
             <field>Type</field>
             <operator>EqualTo</operator>
-            <rightValue>
-                <stringValue>Builder Parent</stringValue>
-            </rightValue>
+            <rightValue><stringValue>Builder Market</stringValue></rightValue>
         </filters>
         <getFirstRecordOnly>true</getFirstRecordOnly>
         <object>Account</object>
-        <outputReference>BuilderAccount</outputReference>
+        <outputReference>MatchedBuilderAccount</outputReference>
         <queriedFields>Id</queriedFields>
         <queriedFields>Name</queriedFields>
-        <queriedFields>Type</queriedFields>
     </recordLookups>
 
-    <!-- ── STEP 6: DID WE FIND A BUILDER ACCOUNT? ───────────────────────── -->
-    <decisions>
-        <name>Did_We_Find_Builder_Account</name>
-        <label>Did we find Lennar Builder Account?</label>
-        <locationX>176</locationX>
+    <recordLookups>
+        <name>Lookup_Columbia_Account</name>
+        <label>Look Up Lennar Homes – Columbia</label>
+        <locationX>440</locationX>
         <locationY>720</locationY>
-        <defaultConnectorLabel>No account found — leave blank</defaultConnectorLabel>
+        <assignNullValuesIfNoRecordsFound>false</assignNullValuesIfNoRecordsFound>
+        <connector><targetReference>Set_Matched_Builder_Account</targetReference></connector>
+        <filterLogic>1 AND 2</filterLogic>
+        <filters>
+            <field>Name</field>
+            <operator>Contains</operator>
+            <rightValue><stringValue>Columbia</stringValue></rightValue>
+        </filters>
+        <filters>
+            <field>Type</field>
+            <operator>EqualTo</operator>
+            <rightValue><stringValue>Builder Market</stringValue></rightValue>
+        </filters>
+        <getFirstRecordOnly>true</getFirstRecordOnly>
+        <object>Account</object>
+        <outputReference>MatchedBuilderAccount</outputReference>
+        <queriedFields>Id</queriedFields>
+        <queriedFields>Name</queriedFields>
+    </recordLookups>
+
+    <recordLookups>
+        <name>Lookup_Greenville_Account</name>
+        <label>Look Up Lennar Homes – Greenville</label>
+        <locationX>704</locationX>
+        <locationY>720</locationY>
+        <assignNullValuesIfNoRecordsFound>false</assignNullValuesIfNoRecordsFound>
+        <connector><targetReference>Set_Matched_Builder_Account</targetReference></connector>
+        <filterLogic>1 AND 2</filterLogic>
+        <filters>
+            <field>Name</field>
+            <operator>Contains</operator>
+            <rightValue><stringValue>Greenville</stringValue></rightValue>
+        </filters>
+        <filters>
+            <field>Type</field>
+            <operator>EqualTo</operator>
+            <rightValue><stringValue>Builder Market</stringValue></rightValue>
+        </filters>
+        <getFirstRecordOnly>true</getFirstRecordOnly>
+        <object>Account</object>
+        <outputReference>MatchedBuilderAccount</outputReference>
+        <queriedFields>Id</queriedFields>
+        <queriedFields>Name</queriedFields>
+    </recordLookups>
+
+    <recordLookups>
+        <name>Lookup_Triad_Account</name>
+        <label>Look Up Lennar Homes – Triad</label>
+        <locationX>968</locationX>
+        <locationY>720</locationY>
+        <assignNullValuesIfNoRecordsFound>false</assignNullValuesIfNoRecordsFound>
+        <connector><targetReference>Set_Matched_Builder_Account</targetReference></connector>
+        <filterLogic>1 AND 2</filterLogic>
+        <filters>
+            <field>Name</field>
+            <operator>Contains</operator>
+            <rightValue><stringValue>Triad</stringValue></rightValue>
+        </filters>
+        <filters>
+            <field>Type</field>
+            <operator>EqualTo</operator>
+            <rightValue><stringValue>Builder Market</stringValue></rightValue>
+        </filters>
+        <getFirstRecordOnly>true</getFirstRecordOnly>
+        <object>Account</object>
+        <outputReference>MatchedBuilderAccount</outputReference>
+        <queriedFields>Id</queriedFields>
+        <queriedFields>Name</queriedFields>
+    </recordLookups>
+
+    <!-- ── STEP 6: DID THE LOOKUP RETURN A MATCH? ────────────────────── -->
+    <decisions>
+        <name>Set_Matched_Builder_Account</name>
+        <label>Did market lookup return an account?</label>
+        <locationX>440</locationX>
+        <locationY>840</locationY>
+        <defaultConnector><targetReference>Flag_Ambiguous_Builder</targetReference></defaultConnector>
+        <defaultConnectorLabel>No match — flag for review</defaultConnectorLabel>
         <rules>
-            <name>Found_Builder_Account</name>
+            <name>Account_Found</name>
             <conditionLogic>1</conditionLogic>
             <conditions>
-                <leftValueReference>BuilderAccount.Id</leftValueReference>
+                <leftValueReference>MatchedBuilderAccount.Id</leftValueReference>
                 <operator>IsNull</operator>
-                <rightValue>
-                    <booleanValue>false</booleanValue>
-                </rightValue>
+                <rightValue><booleanValue>false</booleanValue></rightValue>
             </conditions>
-            <connector>
-                <targetReference>Set_Builder_Account</targetReference>
-            </connector>
-            <label>Yes — set it</label>
+            <connector><targetReference>Assign_Builder_Account</targetReference></connector>
+            <label>Match found — set it</label>
         </rules>
     </decisions>
 
-    <!-- ── STEP 7: STAMP BUILDER ACCOUNT ON VOUCHER ─────────────────────── -->
-    <!--
-        BUILDER SIDE: Sets Builder_Account__c = Lennar Homes (sponsorship/funding).
-        HOMEOWNER SIDE: Contact__c is NOT touched here.
-        Contact__c is set separately when the homeowner claims the voucher
-        via web form, Marketing Cloud journey, or manual entry.
-    -->
+    <!-- ── STEP 7A: SET BUILDER ACCOUNT (CONFIDENT MATCH) ────────────── -->
     <assignments>
-        <name>Set_Builder_Account</name>
-        <label>Set Builder Account (Lennar — sponsorship side)</label>
+        <name>Assign_Builder_Account</name>
+        <label>Set Builder_Account__c (confident market match)</label>
         <locationX>176</locationX>
-        <locationY>840</locationY>
+        <locationY>960</locationY>
         <assignmentItems>
             <assignToReference>$Record.Builder_Account__c</assignToReference>
             <operator>Assign</operator>
-            <value>
-                <elementReference>BuilderAccount.Id</elementReference>
-            </value>
+            <value><elementReference>MatchedBuilderAccount.Id</elementReference></value>
+        </assignmentItems>
+    </assignments>
+
+    <!-- ── STEP 7B: FLAG AMBIGUOUS — DO NOT GUESS ────────────────────── -->
+    <!--
+        Per spec: "If ambiguous, leave blank and flag for review."
+        Do NOT default to Lennar Homes parent.
+        Do NOT silently guess between Charlotte, Greenville, Columbia, Triad.
+        Set Needs_Review__c = true so this surfaces for human review.
+    -->
+    <assignments>
+        <name>Flag_Ambiguous_Builder</name>
+        <label>Flag — ambiguous builder, do not guess</label>
+        <locationX>704</locationX>
+        <locationY>960</locationY>
+        <assignmentItems>
+            <assignToReference>$Record.Needs_Review__c</assignToReference>
+            <operator>Assign</operator>
+            <value><booleanValue>true</booleanValue></value>
+        </assignmentItems>
+        <assignmentItems>
+            <assignToReference>$Record.Review_Reason__c</assignToReference>
+            <operator>Assign</operator>
+            <value><stringValue>Builder account not auto-assigned: campaign name did not contain a confident Lennar market keyword (Charlotte, Columbia, Greenville, Triad). Review and manually set Builder_Account__c to the correct Lennar division. Do not use Lennar Homes parent unless business-approved.</stringValue></value>
         </assignmentItems>
     </assignments>
 </Flow>

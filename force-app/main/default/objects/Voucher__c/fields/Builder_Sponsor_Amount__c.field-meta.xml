@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Builder_Sponsor_Amount__c</fullName>
+    <label>Builder / Sponsor Amount</label>
+    <description>Amount Lennar or the builder sponsor funds or reimburses. Equal to Voucher_Face_Value__c in standard scenarios. Preserved separately from customer invoice amount for builder billing/reimbursement reporting.</description>
+    <type>Currency</type>
+    <precision>18</precision>
+    <scale>2</scale>
+    <trackHistory>false</trackHistory>
+    <trackTrending>false</trackTrending>
+</CustomField>

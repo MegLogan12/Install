@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Needs_Review__c</fullName>
+    <label>Needs Review</label>
+    <description>Set to true automatically when: builder account is ambiguous or could not be confidently matched, duplicate voucher detected for same lot/property/address, or claim validation fails. Routes to review queue. Clear only after review is complete.</description>
+    <type>Checkbox</type>
+    <defaultValue>false</defaultValue>
+    <trackHistory>true</trackHistory>
+    <trackTrending>false</trackTrending>
+</CustomField>
