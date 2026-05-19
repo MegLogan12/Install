@@ -1,0 +1,14 @@
+{
+  "name": "loving-dispatch",
+  "version": "1.0.0",
+  "description": "CLI for managing and deploying the LOVING Dispatch site",
+  "bin": {
+    "dispatch": "./bin/dispatch.js"
+  },
+  "scripts": {
+    "link": "npm link"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
