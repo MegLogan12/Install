@@ -304,6 +304,177 @@ async function cmdPreview(args) {
   process.on('SIGINT', () => { server.close(); process.exit(0); });
 }
 
+async function cmdCheckLennar() {
+  const cfg = loadConfig();
+  const sf = cfg.salesforce;
+  if (!sf) { console.log(red('\n  Not connected. Run: dispatch connect\n')); process.exit(1); }
+
+  console.log(bold('\n  Lennar / Voucher Deep Check\n'));
+
+  const campaigns = await sfQuery(sf, "SELECT Id,Name,Type,Status,Description,StartDate,EndDate FROM Campaign ORDER BY Name LIMIT 100");
+  const voucherDesc = await sfDescribe(sf, 'Voucher__c');
+  const vouchers = await sfQuery(sf, "SELECT Id,Name FROM Voucher__c LIMIT 20");
+  const allFlows = await sfTooling(sf, "SELECT Id,DeveloperName,Status,VersionNumber FROM Flow ORDER BY DeveloperName LIMIT 200");
+  const lennarFlows = (allFlows.records || []).filter(f =>
+    /lennar|grilling|island|voucher/i.test(f.DeveloperName)
+  );
+
+  console.log(bold('  Campaigns in org:'));
+  if (!campaigns.records?.length) {
+    console.log(red('  No campaigns found.'));
+  } else {
+    campaigns.records.forEach(c => {
+      console.log(`  ${c.Name.padEnd(50)} Type: ${(c.Type||'').padEnd(20)} Status: ${c.Status||''}`);
+      if (c.Description) console.log(gray(`    ${c.Description.slice(0,100)}`));
+    });
+  }
+
+  console.log(bold('\n  Voucher__c fields:'));
+  if (!voucherDesc.ok) {
+    console.log(red(`  Could not describe Voucher__c: ${voucherDesc.error}`));
+  } else {
+    voucherDesc.fields
+      .filter(f => !['Id','IsDeleted','Name','CreatedDate','CreatedById','LastModifiedDate','LastModifiedById','SystemModstamp','LastActivityDate'].includes(f.name))
+      .forEach(f => console.log(`  ${f.name.padEnd(45)} ${f.label}`));
+  }
+
+  console.log(bold('\n  Sample Voucher records:'));
+  (vouchers.records || []).forEach(v => console.log(`  ${v.Id}  ${v.Name}`));
+
+  console.log(bold('\n  Flows matching lennar/grilling/voucher:'));
+  if (!lennarFlows.length) {
+    console.log(red('  None found.'));
+    console.log(gray('\n  All active flows in org:'));
+    (allFlows.records || []).filter(f => f.Status === 'Active').forEach(f =>
+      console.log(gray(`  ${f.DeveloperName}`))
+    );
+  } else {
+    lennarFlows.forEach(f => console.log(`  ${f.DeveloperName}  v${f.VersionNumber}  ${f.Status}`));
+  }
+
+  console.log(bold('\n  Paste this output to Claude to build the Lennar flow.\n'));
+}
+
+async function cmdFix(args) {
+  const subCmd = args[0];
+  if (!subCmd || subCmd === 'help') {
+    console.log(`
+  ${bold('dispatch fix')} — deploy production fixes to Salesforce
+
+  ${bold('Subcommands:')}
+    ${cyan('dispatch fix deploy')}        Deploy all metadata fixes (fields + weather flow)
+    ${cyan('dispatch fix territories')}   Rename Charlotte territories to approved names
+    ${cyan('dispatch fix lennar')}        Build and deploy Lennar Grilling Island flow (run check-lennar first)
+
+  ${bold('What gets deployed:')}
+    - Weather_Alert__c.NWS_Classification__c  (picklist field)
+    - Vehicle__c.Unit_Number__c               (text field, external ID)
+    - Vehicle__c.Driver_Name__c               (text field)
+    - Weather_NWS_Classification flow         (before-save, classifies alerts)
+`);
+    return;
+  }
+
+  const cfg = loadConfig();
+  const sf = cfg.salesforce;
+  if (!sf) { console.log(red('\n  Not connected. Run: dispatch connect\n')); process.exit(1); }
+
+  if (subCmd === 'deploy') {
+    console.log(bold('\n  Deploying metadata fixes to Salesforce…\n'));
+
+    // Check sf CLI available
+    try { execSync('sf --version', { stdio: 'ignore' }); } catch {
+      console.log(red('  Salesforce CLI (sf) not found. Install from https://developer.salesforce.com/tools/salesforcecli'));
+      process.exit(1);
+    }
+
+    console.log(gray('  Deploying: NWS_Classification__c, Unit_Number__c, Driver_Name__c, Weather flow…'));
+    try {
+      execSync(
+        `sf project deploy start --source-dir force-app --target-org dispatch --wait 10`,
+        { cwd: REPO_ROOT, stdio: 'inherit' }
+      );
+      console.log(green('\n  All fixes deployed successfully.\n'));
+      console.log(gray('  Next: run "dispatch fix territories" to rename Charlotte markets.'));
+      console.log(gray('  Next: run "dispatch check-lennar" then paste output to Claude to build the Lennar flow.\n'));
+    } catch (err) {
+      console.log(red('\n  Deploy failed. Check the output above for details.'));
+      console.log(gray('  Common fix: run "sf org login web --alias dispatch" to re-authenticate.\n'));
+    }
+    return;
+  }
+
+  if (subCmd === 'territories') {
+    console.log(bold('\n  Charlotte Territory Rename\n'));
+
+    const territories = await sfQuery(sf,
+      "SELECT Id, Name FROM ServiceTerritory WHERE IsActive=true AND (Name LIKE '%Charlotte%' OR Name LIKE '%Cabarrus%' OR Name LIKE '%Lake Norman%' OR Name LIKE '%Gaston%') ORDER BY Name"
+    );
+
+    if (!territories.records?.length) {
+      console.log(yellow('  No Charlotte-area territories found.\n'));
+      return;
+    }
+
+    console.log('  Found these Charlotte-area territories:\n');
+    territories.records.forEach((t, i) => console.log(`  ${i + 1}. ${t.Id}  ${t.Name}`));
+
+    console.log(bold('\n  Rename plan:'));
+    console.log('  The 2 missing approved markets are: Charlotte - North  and  Charlotte - South');
+    console.log('  Map one existing territory to each.\n');
+
+    const northAnswer = await prompt('  Which territory number should become "Charlotte - North"? (enter number or skip): ');
+    const southAnswer = await prompt('  Which territory number should become "Charlotte - South"? (enter number or skip): ');
+
+    const northIdx = parseInt(northAnswer) - 1;
+    const southIdx = parseInt(southAnswer) - 1;
+
+    const toRename = [];
+    if (!isNaN(northIdx) && territories.records[northIdx]) {
+      toRename.push({ id: territories.records[northIdx].Id, oldName: territories.records[northIdx].Name, newName: 'Charlotte - North' });
+    }
+    if (!isNaN(southIdx) && territories.records[southIdx]) {
+      toRename.push({ id: territories.records[southIdx].Id, oldName: territories.records[southIdx].Name, newName: 'Charlotte - South' });
+    }
+
+    if (!toRename.length) {
+      console.log(yellow('\n  No renames selected. Exiting.\n'));
+      return;
+    }
+
+    console.log(bold('\n  About to rename:'));
+    toRename.forEach(r => console.log(`  ${r.oldName}  →  ${r.newName}`));
+    const confirm = await prompt('\n  Confirm? (yes/no): ');
+    if (confirm.toLowerCase() !== 'yes') {
+      console.log(yellow('  Cancelled.\n'));
+      return;
+    }
+
+    for (const r of toRename) {
+      try {
+        await sfRequest(sf.instanceUrl, sf.accessToken,
+          `/services/data/v60.0/sobjects/ServiceTerritory/${r.id}`,
+          'PATCH', { Name: r.newName }
+        );
+        console.log(green(`  Renamed: ${r.oldName} → ${r.newName}`));
+      } catch (err) {
+        console.log(red(`  Failed to rename ${r.oldName}: ${err.message}`));
+      }
+    }
+    console.log(bold('\n  Done. Re-run "dispatch audit" to verify markets.\n'));
+    return;
+  }
+
+  if (subCmd === 'lennar') {
+    console.log(yellow('\n  Run "dispatch check-lennar" first and paste the output to Claude.'));
+    console.log(gray('  Claude will build the flow and add it here.\n'));
+    return;
+  }
+
+  console.log(red(`\n  Unknown fix subcommand: ${subCmd}\n`));
+  await cmdFix(['help']);
+}
+
 async function cmdSync() {
   const cfg = loadConfig();
   const sf = cfg.salesforce;
@@ -1042,16 +1213,17 @@ function printHelp() {
     ${cyan('deploy')} [-m "msg"]    Commit and push site to GitHub Pages
     ${cyan('preview')} [--port N]   Serve the site locally (default port 3000)
     ${cyan('sync')}                 Pull job data from Salesforce (configure SOQL first)
-    ${cyan('audit')}               Full production system audit — outputs live org status report
+    ${cyan('audit')}               Full production system audit
+    ${cyan('fix')} <subcommand>     Deploy production fixes (run: dispatch fix help)
+    ${cyan('check-lennar')}         Deep check of Lennar/Voucher/Campaign data
     ${cyan('help')}                 Show this help
 
   ${bold('Examples:')}
     dispatch connect
     dispatch audit
-    dispatch audit > audit-report.txt
-    dispatch deploy -m "Update zone assignments"
-    dispatch preview --port 8080
-    dispatch status
+    dispatch fix deploy
+    dispatch fix territories
+    dispatch check-lennar
 `);
 }
 
@@ -1065,7 +1237,9 @@ function printHelp() {
     case 'deploy':  await cmdDeploy(args); break;
     case 'preview': await cmdPreview(args); break;
     case 'sync':    await cmdSync(); break;
-    case 'audit':   await cmdAudit(); break;
+    case 'audit':         await cmdAudit(); break;
+    case 'fix':           await cmdFix(args); break;
+    case 'check-lennar':  await cmdCheckLennar(); break;
     case 'help':
     case '--help':
     case '-h':

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Unit_Number__c</fullName>
+    <label>Unit Number</label>
+    <type>Text</type>
+    <length>50</length>
+    <externalId>true</externalId>
+    <unique>false</unique>
+    <caseSensitive>false</caseSensitive>
+    <trackHistory>false</trackHistory>
+    <trackTrending>false</trackTrending>
+</CustomField>

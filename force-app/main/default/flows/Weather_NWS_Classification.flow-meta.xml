@@ -1,0 +1,281 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Flow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>60.0</apiVersion>
+    <description>Sets NWS_Classification__c on Weather_Alert__c based on event type and severity keywords. Runs before save on create and update.</description>
+    <environments>Default</environments>
+    <interviewLabel>Weather NWS Classification {!$Flow.CurrentDateTime}</interviewLabel>
+    <label>Weather NWS Classification</label>
+    <processMetadataValues>
+        <name>BuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processType>AutoLaunchedFlow</processType>
+    <start>
+        <locationX>176</locationX>
+        <locationY>0</locationY>
+        <object>Weather_Alert__c</object>
+        <recordTriggerType>CreateAndUpdate</recordTriggerType>
+        <triggerType>RecordBeforeSave</triggerType>
+        <connector>
+            <targetReference>Check_Extreme</targetReference>
+        </connector>
+    </start>
+    <status>Active</status>
+
+    <!-- ── FORMULAS ─────────────────────────────────────────────────────── -->
+    <formulas>
+        <name>EventUpper</name>
+        <dataType>String</dataType>
+        <expression>UPPER({!$Record.Event__c})</expression>
+    </formulas>
+
+    <!-- ── DECISIONS ────────────────────────────────────────────────────── -->
+    <decisions>
+        <name>Check_Extreme</name>
+        <label>Extreme?</label>
+        <locationX>176</locationX>
+        <locationY>120</locationY>
+        <defaultConnector>
+            <targetReference>Check_Severe</targetReference>
+        </defaultConnector>
+        <defaultConnectorLabel>Not Extreme</defaultConnectorLabel>
+        <rules>
+            <name>Is_Extreme</name>
+            <conditionLogic>1 OR 2 OR 3 OR 4 OR 5 OR 6</conditionLogic>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>TORNADO WARNING</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>HURRICANE WARNING</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>FLASH FLOOD EMERGENCY</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>EXTREME WIND WARNING</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>BLIZZARD WARNING</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>$Record.Severity__c</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue><stringValue>Extreme</stringValue></rightValue>
+            </conditions>
+            <connector>
+                <targetReference>Set_Extreme</targetReference>
+            </connector>
+            <label>Is Extreme</label>
+        </rules>
+    </decisions>
+
+    <decisions>
+        <name>Check_Severe</name>
+        <label>Severe?</label>
+        <locationX>440</locationX>
+        <locationY>120</locationY>
+        <defaultConnector>
+            <targetReference>Check_Moderate</targetReference>
+        </defaultConnector>
+        <defaultConnectorLabel>Not Severe</defaultConnectorLabel>
+        <rules>
+            <name>Is_Severe</name>
+            <conditionLogic>1 OR 2 OR 3 OR 4 OR 5 OR 6 OR 7</conditionLogic>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>SEVERE THUNDERSTORM WARNING</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>FLASH FLOOD WARNING</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>WINTER STORM WARNING</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>ICE STORM WARNING</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>HIGH WIND WARNING</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>TROPICAL STORM WARNING</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>$Record.Severity__c</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue><stringValue>Severe</stringValue></rightValue>
+            </conditions>
+            <connector>
+                <targetReference>Set_Severe</targetReference>
+            </connector>
+            <label>Is Severe</label>
+        </rules>
+    </decisions>
+
+    <decisions>
+        <name>Check_Moderate</name>
+        <label>Moderate?</label>
+        <locationX>704</locationX>
+        <locationY>120</locationY>
+        <defaultConnector>
+            <targetReference>Check_Minor</targetReference>
+        </defaultConnector>
+        <defaultConnectorLabel>Not Moderate</defaultConnectorLabel>
+        <rules>
+            <name>Is_Moderate</name>
+            <conditionLogic>1 OR 2 OR 3 OR 4</conditionLogic>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>WATCH</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>FLOOD STATEMENT</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>WIND ADVISORY</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>$Record.Severity__c</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue><stringValue>Moderate</stringValue></rightValue>
+            </conditions>
+            <connector>
+                <targetReference>Set_Moderate</targetReference>
+            </connector>
+            <label>Is Moderate</label>
+        </rules>
+    </decisions>
+
+    <decisions>
+        <name>Check_Minor</name>
+        <label>Minor?</label>
+        <locationX>968</locationX>
+        <locationY>120</locationY>
+        <defaultConnector>
+            <targetReference>Set_Unknown</targetReference>
+        </defaultConnector>
+        <defaultConnectorLabel>Unknown</defaultConnectorLabel>
+        <rules>
+            <name>Is_Minor</name>
+            <conditionLogic>1 OR 2 OR 3 OR 4 OR 5</conditionLogic>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>ADVISORY</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>FROST</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>FREEZE</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>EventUpper</leftValueReference>
+                <operator>Contains</operator>
+                <rightValue><stringValue>SPECIAL WEATHER STATEMENT</stringValue></rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>$Record.Severity__c</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue><stringValue>Minor</stringValue></rightValue>
+            </conditions>
+            <connector>
+                <targetReference>Set_Minor</targetReference>
+            </connector>
+            <label>Is Minor</label>
+        </rules>
+    </decisions>
+
+    <!-- ── ASSIGNMENTS ───────────────────────────────────────────────────── -->
+    <assignments>
+        <name>Set_Extreme</name>
+        <label>Set Extreme</label>
+        <locationX>176</locationX>
+        <locationY>240</locationY>
+        <assignmentItems>
+            <assignToReference>$Record.NWS_Classification__c</assignToReference>
+            <operator>Assign</operator>
+            <value><stringValue>Extreme</stringValue></value>
+        </assignmentItems>
+    </assignments>
+
+    <assignments>
+        <name>Set_Severe</name>
+        <label>Set Severe</label>
+        <locationX>440</locationX>
+        <locationY>240</locationY>
+        <assignmentItems>
+            <assignToReference>$Record.NWS_Classification__c</assignToReference>
+            <operator>Assign</operator>
+            <value><stringValue>Severe</stringValue></value>
+        </assignmentItems>
+    </assignments>
+
+    <assignments>
+        <name>Set_Moderate</name>
+        <label>Set Moderate</label>
+        <locationX>704</locationX>
+        <locationY>240</locationY>
+        <assignmentItems>
+            <assignToReference>$Record.NWS_Classification__c</assignToReference>
+            <operator>Assign</operator>
+            <value><stringValue>Moderate</stringValue></value>
+        </assignmentItems>
+    </assignments>
+
+    <assignments>
+        <name>Set_Minor</name>
+        <label>Set Minor</label>
+        <locationX>968</locationX>
+        <locationY>240</locationY>
+        <assignmentItems>
+            <assignToReference>$Record.NWS_Classification__c</assignToReference>
+            <operator>Assign</operator>
+            <value><stringValue>Minor</stringValue></value>
+        </assignmentItems>
+    </assignments>
+
+    <assignments>
+        <name>Set_Unknown</name>
+        <label>Set Unknown</label>
+        <locationX>1232</locationX>
+        <locationY>240</locationY>
+        <assignmentItems>
+            <assignToReference>$Record.NWS_Classification__c</assignToReference>
+            <operator>Assign</operator>
+            <value><stringValue>Unknown</stringValue></value>
+        </assignmentItems>
+    </assignments>
+</Flow>
