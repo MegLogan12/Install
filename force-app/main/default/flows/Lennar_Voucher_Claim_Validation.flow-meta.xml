@@ -83,9 +83,9 @@
         <locationX>440</locationX>
         <locationY>480</locationY>
         <customErrorMessages>
-            <errorMessage>A property or lot must be linked before this voucher can advance to {!$Record.Status__c}. Set Homeowner_Property__c or populate the address key and try again.</errorMessage>
+            <errorMessage>An address key must be set before this voucher can advance to {!$Record.Status__c}. Populate Normalized_Address_Key__c and try again.</errorMessage>
             <isFieldError>true</isFieldError>
-            <fieldSelection>Homeowner_Property__c</fieldSelection>
+            <fieldSelection>Normalized_Address_Key__c</fieldSelection>
         </customErrorMessages>
     </customErrors>
 
@@ -247,19 +247,14 @@
 
     <decisions>
         <name>Is_Lot_Or_Property_Present</name>
-        <label>Is Lot, Homeowner_Property, or Address Key present?</label>
+        <label>Is Address Key present?</label>
         <locationX>176</locationX>
         <locationY>480</locationY>
         <defaultConnector><targetReference>Block_No_Lot</targetReference></defaultConnector>
         <defaultConnectorLabel>None present — block</defaultConnectorLabel>
         <rules>
             <name>Lot_Present</name>
-            <conditionLogic>1 OR 2 OR 3</conditionLogic>
-            <conditions>
-                <leftValueReference>$Record.Homeowner_Property__c</leftValueReference>
-                <operator>IsNull</operator>
-                <rightValue><booleanValue>false</booleanValue></rightValue>
-            </conditions>
+            <conditionLogic>1 OR 2</conditionLogic>
             <conditions>
                 <leftValueReference>$Record.Normalized_Address_Key__c</leftValueReference>
                 <operator>IsNull</operator>
@@ -331,11 +326,11 @@
         <locationY>720</locationY>
         <assignNullValuesIfNoRecordsFound>true</assignNullValuesIfNoRecordsFound>
         <connector><targetReference>Was_Duplicate_Found</targetReference></connector>
-        <filterLogic>1 AND 2 AND 3 AND 4</filterLogic>
+        <filterLogic>1 AND 2 AND 3</filterLogic>
         <filters>
-            <field>Homeowner_Property__c</field>
+            <field>Normalized_Address_Key__c</field>
             <operator>EqualTo</operator>
-            <value><elementReference>$Record.Homeowner_Property__c</elementReference></value>
+            <value><elementReference>$Record.Normalized_Address_Key__c</elementReference></value>
         </filters>
         <filters>
             <field>Id</field>
@@ -346,11 +341,6 @@
             <field>Standard_Grilling_Island_Included__c</field>
             <operator>EqualTo</operator>
             <value><booleanValue>true</booleanValue></value>
-        </filters>
-        <filters>
-            <field>Status__c</field>
-            <operator>NotEqualTo</operator>
-            <value><stringValue>Voided</stringValue></value>
         </filters>
         <getFirstRecordOnly>false</getFirstRecordOnly>
         <object>Voucher__c</object>
