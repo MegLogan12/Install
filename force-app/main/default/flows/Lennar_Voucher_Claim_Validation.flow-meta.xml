@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Flow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>60.0</apiVersion>
+    <description>
+        Lennar Voucher Claim Validation — Homeowner Side Enforcement.
+
+        DUAL-SIDED RULE:
+        ────────────────
+        Builder side  (Builder_Account__c) = sponsorship, funding, reimbursement.
+        Homeowner side (Contact__c)        = claim, quote, upgrade, redemption.
+
+        This flow enforces that Contact__c (homeowner) is present before a voucher
+        can advance past Active status. You cannot reserve, apply to quote, or
+        redeem a voucher without identifying the homeowner claimant.
+
+        Blocked transitions without Contact__c:
+          Active → Reserved
+          Active → Applied to Quote
+          Active → Contract Signed
+          Active → Deposit Paid
+          Submitted → Validated
+          Validated → Reserved
+
+        Builder_Account__c alone is not sufficient to redeem — the homeowner
+        must be identified on the homeowner side of the voucher.
+    </description>
+    <environments>Default</environments>
+    <interviewLabel>Lennar Voucher Claim Validation {!$Flow.CurrentDateTime}</interviewLabel>
+    <label>Lennar Voucher Claim Validation</label>
+    <processMetadataValues>
+        <name>BuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processType>AutoLaunchedFlow</processType>
+    <start>
+        <locationX>176</locationX>
+        <locationY>0</locationY>
+        <object>Voucher__c</object>
+        <recordTriggerType>Update</recordTriggerType>
+        <triggerType>RecordBeforeSave</triggerType>
+        <filterLogic>1 AND 2</filterLogic>
+        <filters>
+            <!-- Only run on Lennar / Grilling Island vouchers -->
+            <field>Standard_Grilling_Island_Included__c</field>
+            <operator>EqualTo</operator>
+            <value>
+                <booleanValue>true</booleanValue>
+            </value>
+        </filters>
+        <filters>
+            <!-- Only run when Status is changing -->
+            <field>Status__c</field>
+            <operator>IsChanged</operator>
+            <value>
+                <booleanValue>true</booleanValue>
+            </value>
+        </filters>
+        <connector>
+            <targetReference>Is_Advancing_To_Claim_Stage</targetReference>
+        </connector>
+    </start>
+    <status>Active</status>
+
+    <!-- ── STEP 1: IS THE STATUS ADVANCING TO A CLAIM-REQUIRED STAGE? ───── -->
+    <decisions>
+        <name>Is_Advancing_To_Claim_Stage</name>
+        <label>Advancing to a stage that requires homeowner?</label>
+        <locationX>176</locationX>
+        <locationY>120</locationY>
+        <defaultConnectorLabel>No — allowed without homeowner</defaultConnectorLabel>
+        <rules>
+            <name>Requires_Homeowner</name>
+            <conditionLogic>1 OR 2 OR 3 OR 4 OR 5</conditionLogic>
+            <conditions>
+                <leftValueReference>$Record.Status__c</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <stringValue>Reserved</stringValue>
+                </rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>$Record.Status__c</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <stringValue>Applied to Quote</stringValue>
+                </rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>$Record.Status__c</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <stringValue>Contract Signed</stringValue>
+                </rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>$Record.Status__c</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <stringValue>Deposit Paid</stringValue>
+                </rightValue>
+            </conditions>
+            <conditions>
+                <leftValueReference>$Record.Status__c</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <stringValue>Validated</stringValue>
+                </rightValue>
+            </conditions>
+            <connector>
+                <targetReference>Is_Homeowner_Present</targetReference>
+            </connector>
+            <label>Yes — requires homeowner Contact</label>
+        </rules>
+    </decisions>
+
+    <!-- ── STEP 2: IS CONTACT__C (HOMEOWNER) PRESENT? ───────────────────── -->
+    <decisions>
+        <name>Is_Homeowner_Present</name>
+        <label>Is homeowner Contact set?</label>
+        <locationX>176</locationX>
+        <locationY>240</locationY>
+        <defaultConnector>
+            <targetReference>Block_Without_Homeowner</targetReference>
+        </defaultConnector>
+        <defaultConnectorLabel>No homeowner — block</defaultConnectorLabel>
+        <rules>
+            <name>Homeowner_Present</name>
+            <conditionLogic>1</conditionLogic>
+            <conditions>
+                <leftValueReference>$Record.Contact__c</leftValueReference>
+                <operator>IsNull</operator>
+                <rightValue>
+                    <booleanValue>false</booleanValue>
+                </rightValue>
+            </conditions>
+            <label>Yes — homeowner is set, allow</label>
+        </rules>
+    </decisions>
+
+    <!-- ── STEP 3: BLOCK — HOMEOWNER REQUIRED ───────────────────────────── -->
+    <!--
+        Hard stop. The voucher cannot advance to Reserved or beyond
+        without a homeowner Contact identified on the claimant side.
+        Builder_Account__c alone (sponsorship) is not sufficient.
+    -->
+    <customErrors>
+        <name>Block_Without_Homeowner</name>
+        <label>Block — Homeowner Required</label>
+        <locationX>176</locationX>
+        <locationY>360</locationY>
+        <customErrorMessages>
+            <errorMessage>A homeowner contact (Contact) must be assigned before this voucher can be moved to {!$Record.Status__c}. The builder account identifies the sponsor — the homeowner contact identifies the claimant. Both are required to advance this voucher.</errorMessage>
+            <isFieldError>true</isFieldError>
+            <fieldSelection>Contact__c</fieldSelection>
+        </customErrorMessages>
+    </customErrors>
+</Flow>
