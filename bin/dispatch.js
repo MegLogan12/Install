@@ -111,42 +111,47 @@ async function cmdConnect() {
 
   console.log(gray('\n  Authenticating…'));
 
-  const params = new URLSearchParams({
-    grant_type: 'password',
-    client_id: '3MVG9XHzDpTesKvHABDMqBnYBpOMBEVHIKvPFj_PbRj3q8TT3V3vS5gqFN3TXbNjK2QlSgAJBn9xT_GBJ7_S',
-    client_secret: '',
-    username,
-    password: password + securityToken,
-  });
-
-  // Use the standard Salesforce OAuth token endpoint
-  const tokenUrl = `${cleanInstance}/services/oauth2/token`;
+  // Use SOAP login — no Connected App or client ID required
+  const soapBody = `<?xml version="1.0" encoding="utf-8"?>
+<env:Envelope xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:env="http://schemas.xmlsoap.org/soap/envelope/">
+  <env:Body>
+    <n1:login xmlns:n1="urn:partner.soap.sforce.com">
+      <n1:username>${username}</n1:username>
+      <n1:password>${password + securityToken}</n1:password>
+    </n1:login>
+  </env:Body>
+</env:Envelope>`;
 
   let tokenData;
   try {
-    const res = await fetch(tokenUrl, {
+    const res = await fetch(`${cleanInstance}/services/Soap/u/60.0`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
+      headers: {
+        'Content-Type': 'text/xml',
+        'SOAPAction': 'login',
+      },
+      body: soapBody,
     });
-    const json = await res.json();
-    if (!res.ok || json.error) {
-      throw new Error(json.error_description || json.error || `HTTP ${res.status}`);
+    const text = await res.text();
+    if (text.includes('INVALID_LOGIN') || text.includes('faultstring')) {
+      const match = text.match(/<faultstring>(.*?)<\/faultstring>/);
+      throw new Error(match ? match[1] : 'Invalid login');
     }
-    tokenData = json;
+    const sessionMatch = text.match(/<sessionId>(.*?)<\/sessionId>/);
+    const urlMatch = text.match(/<serverUrl>(.*?)<\/serverUrl>/);
+    if (!sessionMatch || !urlMatch) throw new Error('Unexpected response from Salesforce');
+    const serverUrl = urlMatch[1];
+    const instanceUrlParsed = new URL(serverUrl).origin;
+    tokenData = { access_token: sessionMatch[1], instance_url: instanceUrlParsed };
   } catch (err) {
     console.log(red(`\n  Authentication failed: ${err.message}`));
     console.log(gray('  Tip: password + security token must be concatenated with no space.'));
     process.exit(1);
   }
 
-  // Verify connection with a quick identity check
-  let identity;
-  try {
-    identity = await sfRequest(tokenData.instance_url, tokenData.access_token, '/services/oauth2/userinfo');
-  } catch {
-    identity = null;
-  }
+  const identity = { preferred_username: username };
 
   const cfg = loadConfig();
   cfg.salesforce = {
