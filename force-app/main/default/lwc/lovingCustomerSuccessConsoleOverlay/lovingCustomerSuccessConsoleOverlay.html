@@ -1,0 +1,1141 @@
+<template>
+    <div class="console-root">
+
+        <!-- ── Top nav bar ──────────────────────────────────────────────── -->
+        <div class="sf-top">
+            <div class="sf-app">
+                <div class="sf-app-icon">CS</div>
+                Customer Success Console
+            </div>
+            <div class="sf-search">Search cases, builders, orders…</div>
+            <div class="sf-icons">
+                <div class="sf-ico">?</div>
+                <div class="sf-ico">🔔</div>
+                <div class="sf-avatar">ML</div>
+            </div>
+        </div>
+
+        <!-- ── Tab ribbon ───────────────────────────────────────────────── -->
+        <div class="sf-nav">
+            <template for:each={computedTabs} for:item="tab">
+                <button key={tab.id} class={tab.cls} data-tab={tab.id} onclick={handleTabClick}>
+                    {tab.icon}&nbsp;{tab.label}
+                    <template if:true={tab.showBadge}>
+                        <span class={tab.badgeCls}>{tab.badgeCount}</span>
+                    </template>
+                </button>
+            </template>
+        </div>
+
+        <!-- ── Tab panels ───────────────────────────────────────────────── -->
+        <div class="sf-body">
+
+            <!-- ══ HOME ═══════════════════════════════════════════════════ -->
+            <template if:true={isHome}>
+                <div class="layout">
+                    <div class="layout-main">
+
+                        <!-- KPI row -->
+                        <div class="g6">
+                            <div class="kpi ka">
+                                <div class="kn">{kpiOpenCases}</div>
+                                <div class="kl">Open Cases</div>
+                            </div>
+                            <div class="kpi kb">
+                                <div class="kn">{kpiNewToday}</div>
+                                <div class="kl">New Today</div>
+                            </div>
+                            <div class="kpi kr">
+                                <div class="kn">{kpiOverdue}</div>
+                                <div class="kl">7-Day Aged</div>
+                            </div>
+                            <div class="kpi korange">
+                                <div class="kn">{kpiOpenWorkOrders}</div>
+                                <div class="kl">Open Work Orders</div>
+                            </div>
+                            <div class="kpi kp">
+                                <div class="kn">{kpiPendingApprovals}</div>
+                                <div class="kl">Pending Approvals</div>
+                            </div>
+                            <div class="kpi kg">
+                                <div class="kn">{kpiSiteVisitsWeek}</div>
+                                <div class="kl">Site Visits (Wk)</div>
+                            </div>
+                        </div>
+
+                        <!-- Urgent cases -->
+                        <div class="card alert">
+                            <div class="ch">
+                                <div class="ci" style="background:#c23934">!</div>
+                                <h3>Urgent Open Cases</h3>
+                                <button class="ch-link" onclick={navigateToCases}>View All →</button>
+                            </div>
+                            <table class="tbl">
+                                <thead>
+                                    <tr>
+                                        <th>Case #</th>
+                                        <th>Subject</th>
+                                        <th>Account</th>
+                                        <th>Status</th>
+                                        <th>Type</th>
+                                        <th>Modified</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template for:each={urgentCases} for:item="c">
+                                        <tr key={c.Id}>
+                                            <td><button class="nl" data-id={c.Id} onclick={navigateToRecord}>{c.CaseNumber}</button></td>
+                                            <td>{c.Subject}</td>
+                                            <td>{c.accountName}</td>
+                                            <td><span class={c.statusChipCls}>{c.Status}</span></td>
+                                            <td>{c.Type}</td>
+                                            <td>{c.modifiedLabel}</td>
+                                        </tr>
+                                    </template>
+                                    <template if:true={noUrgentCases}>
+                                        <tr><td colspan="6" class="empty-state">No High priority open cases — all clear ✓</td></tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Summary grid -->
+                        <div class="g3">
+                            <div class="card warn">
+                                <div class="ch">
+                                    <div class="ci" style="background:#fe9339">EP</div>
+                                    <h3>EPO / PO Changes</h3>
+                                    <button class="ch-link" data-tab="5" onclick={handleTabClick}>Open →</button>
+                                </div>
+                                <div style="padding:12px 14px;font-size:12px;color:#54698d">
+                                    Review builder-requested changes requiring approval or scope update.
+                                </div>
+                            </div>
+                            <div class="card info">
+                                <div class="ch">
+                                    <div class="ci" style="background:#0070d2">SV</div>
+                                    <h3>Site Visits This Week</h3>
+                                    <button class="ch-link" data-tab="4" onclick={handleTabClick}>Open →</button>
+                                </div>
+                                <div style="padding:12px 14px;font-size:24px;font-weight:500;color:#16325c">
+                                    {kpiSiteVisitsWeek}
+                                </div>
+                            </div>
+                            <div class="card ok">
+                                <div class="ch">
+                                    <div class="ci" style="background:#04844b">CQ</div>
+                                    <h3>Closeout Queue</h3>
+                                    <button class="ch-link" data-tab="8" onclick={handleTabClick}>Open →</button>
+                                </div>
+                                <div style="padding:12px 14px;font-size:12px;color:#54698d">
+                                    Completed Work Orders pending CS review, invoice, or customer follow-up.
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Right rail -->
+                    <div class="layout-rail">
+                        <!-- Agentforce Assist -->
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#534ab7">AI</div>
+                                <h3>Agentforce Assist</h3>
+                            </div>
+                            <div class="agent-card">
+                                <div class="agent-title">AI Suggestions</div>
+                                <div class="agent-copy">Agentforce Assist surfaces knowledge, suggests next steps, and can draft responses. Enable via Setup → Einstein → Agent Studio to activate live suggestions here.</div>
+                                <textarea class="agent-prompt" rows="2" placeholder="Ask Agentforce…" onchange={handleAgentforceInput}></textarea>
+                            </div>
+                        </div>
+                        <!-- SLA -->
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#0070d2">SLA</div>
+                                <h3>SLA &amp; Entitlements</h3>
+                            </div>
+                            <div class="setup-state">
+                                <strong>Open a Case to view SLA</strong>
+                                Entitlement milestones and breach warnings will appear here once a Case is selected.
+                            </div>
+                        </div>
+                        <!-- Tools -->
+                        <div class="card last">
+                            <div class="ch">
+                                <div class="ci" style="background:#04844b">SC</div>
+                                <h3>Service Cloud Tools</h3>
+                            </div>
+                            <div class="qa-list">
+                                <button class="qa-item" onclick={navigateToNewCase}>+ New Case</button>
+                                <button class="qa-item" onclick={navigateToNewWorkOrder}>+ New Work Order</button>
+                                <button class="qa-item" onclick={navigateToNewServiceAppointment}>+ New Site Visit</button>
+                                <button class="qa-item" data-tab="9" onclick={handleTabClick}>📖 Knowledge Base</button>
+                                <button class="qa-item" data-tab="11" onclick={handleTabClick}>👍 Approvals Queue</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- ══ OMNI INBOX ══════════════════════════════════════════════ -->
+            <template if:true={isOmni}>
+                <div class="layout">
+                    <div class="layout-main">
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#fe9339">📥</div>
+                                <h3>Routed Work</h3>
+                                <button class="sf-btn primary" onclick={navigateToNewCase}>+ New Case</button>
+                            </div>
+                            <template if:true={noOmniWork}>
+                                <div class="setup-state">
+                                    <strong>Omni-Channel Setup Required</strong>
+                                    No routed work found. Omni-Channel must be enabled and the agent must be available. Go to Setup → Omni-Channel Settings to configure. Once enabled, routed Cases, Chats, and Calls will appear here automatically.
+                                    <br/><br/>
+                                    <em>Fallback: use the Cases tab to manage work directly.</em>
+                                </div>
+                            </template>
+                            <template if:false={noOmniWork}>
+                                <template for:each={omniWork} for:item="work">
+                                    <div key={work.Id} class="inbox-row unread" data-id={work.WorkItemId} onclick={navigateToRecord}>
+                                        <div class="inbox-icon" style="background:#fe9339">W</div>
+                                        <div class="inbox-content">
+                                            <div class="inbox-meta">
+                                                <span class="inbox-from">Routed Work Item</span>
+                                                <span class="chip ca">{work.Status}</span>
+                                            </div>
+                                            <div class="inbox-subject">{work.WorkItemId}</div>
+                                            <div class="inbox-preview">Click to open routed record</div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </template>
+                        </div>
+
+                        <div class="ab ab-b">
+                            <strong>Omni-Channel:</strong> When enabled, new Cases, Email-to-Case, Web-to-Case, Chats, and Calls are pushed here automatically. Agents must set status to Available in the Omni-Channel utility bar widget.
+                        </div>
+                    </div>
+
+                    <!-- Right rail -->
+                    <div class="layout-rail">
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#534ab7">AI</div><h3>Agentforce Assist</h3></div>
+                            <div class="agent-card"><div class="agent-title">AI Suggestions</div><div class="agent-copy">Enable Agentforce in Setup → Einstein → Agent Studio for live AI coaching and response drafting in the Omni Inbox.</div></div>
+                        </div>
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#0070d2">CH</div><h3>Omni-Channel Status</h3></div>
+                            <div style="padding:12px 14px;font-size:12px;color:#54698d;line-height:1.6">
+                                Set your availability in the Omni-Channel widget in the utility bar. Your current queue assignments determine which work is routed here.
+                            </div>
+                        </div>
+                        <div class="card last">
+                            <div class="ch"><div class="ci" style="background:#04844b">SC</div><h3>Quick Actions</h3></div>
+                            <div class="qa-list">
+                                <button class="qa-item" onclick={navigateToNewCase}>+ New Case</button>
+                                <button class="qa-item" data-tab="2" onclick={handleTabClick}>📋 All Cases</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- ══ CASES ═══════════════════════════════════════════════════ -->
+            <template if:true={isCases}>
+                <div class="layout">
+                    <div class="layout-main">
+                        <div class="card">
+                            <div class="list-toolbar">
+                                <template for:each={caseFilterChips} for:item="chip">
+                                    <button key={chip.label} class={chip.cls} data-type={chip.label} onclick={handleCaseFilterClick}>{chip.label}</button>
+                                </template>
+                                <button class="sf-btn primary" style="margin-left:auto" onclick={navigateToNewCase}>+ New Case</button>
+                            </div>
+                            <template if:true={casesError}>
+                                <div class="error-state">{casesError}</div>
+                            </template>
+                            <table class="tbl">
+                                <thead>
+                                    <tr>
+                                        <th>Case #</th>
+                                        <th>Subject</th>
+                                        <th>Account</th>
+                                        <th>Contact</th>
+                                        <th>Status</th>
+                                        <th>Priority</th>
+                                        <th>Type</th>
+                                        <th>Modified</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template for:each={cases} for:item="c">
+                                        <tr key={c.Id}>
+                                            <td><button class="nl" data-id={c.Id} onclick={navigateToRecord}>{c.CaseNumber}</button></td>
+                                            <td>{c.Subject}</td>
+                                            <td>{c.accountName}</td>
+                                            <td>{c.contactName}</td>
+                                            <td><span class={c.statusChipCls}>{c.Status}</span></td>
+                                            <td><span class={c.priorityCls}>{c.Priority}</span></td>
+                                            <td>{c.Type}</td>
+                                            <td>{c.modifiedLabel}</td>
+                                        </tr>
+                                    </template>
+                                    <template if:true={noCases}>
+                                        <tr><td colspan="8" class="empty-state">No open cases match this filter.</td></tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Right rail -->
+                    <div class="layout-rail">
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#534ab7">AI</div><h3>Agentforce Assist</h3></div>
+                            <div class="agent-card"><div class="agent-title">Case Intelligence</div><div class="agent-copy">Select a Case record to activate AI-suggested next steps, knowledge matches, and draft responses.</div></div>
+                        </div>
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#0070d2">SLA</div><h3>SLA &amp; Entitlements</h3></div>
+                            <div class="setup-state"><strong>Open a Case to view SLA</strong>Milestones and breach timers appear on the Case record Entitlement panel.</div>
+                        </div>
+                        <div class="card last">
+                            <div class="ch"><div class="ci" style="background:#04844b">SC</div><h3>Actions</h3></div>
+                            <div class="qa-list">
+                                <button class="qa-item" onclick={navigateToNewCase}>+ New Case</button>
+                                <button class="qa-item" onclick={navigateToCases}>↗ Open Cases List View</button>
+                                <button class="qa-item" data-tab="11" onclick={handleTabClick}>👍 Approvals</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- ══ BUILDER 360 ═════════════════════════════════════════════ -->
+            <template if:true={isBuilder360}>
+                <div class="layout">
+                    <div class="layout-main">
+
+                        <!-- Builder selector -->
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#16325c">B</div>
+                                <h3>Select Builder Account</h3>
+                            </div>
+                            <div style="padding:12px 14px">
+                                <select class="list-search" style="max-width:400px" onchange={handleBuilderDropdown}>
+                                    <option value="">— Choose a builder —</option>
+                                    <template for:each={builderAccounts} for:item="acct">
+                                        <option key={acct.Id} value={acct.Id}>{acct.Name}</option>
+                                    </template>
+                                </select>
+                                <template if:true={hasSelectedBuilder}>
+                                    <button class="sf-btn" style="margin-left:8px" data-id={selectedBuilderId} onclick={navigateToRecord}>Open Account ↗</button>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Builder KPIs -->
+                        <template if:true={hasSelectedBuilder}>
+                            <div class="g3">
+                                <div class="kpi ka">
+                                    <div class="kn">{builderOpenCases}</div>
+                                    <div class="kl">Open Cases</div>
+                                </div>
+                                <div class="kpi korange">
+                                    <div class="kn">{builderOpenWOs}</div>
+                                    <div class="kl">Open Work Orders</div>
+                                </div>
+                                <div class="kpi kb">
+                                    <div class="kn">{builderOpenQuotes}</div>
+                                    <div class="kl">Open Quotes</div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Cases for selected builder -->
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#c23934">📋</div>
+                                <h3>Open Cases</h3>
+                            </div>
+                            <template if:true={noUrgentCases}>
+                                <div class="empty-state">Select a builder above to see their open cases.</div>
+                            </template>
+                            <table class="tbl">
+                                <thead><tr><th>Case #</th><th>Subject</th><th>Status</th><th>Type</th><th>Modified</th></tr></thead>
+                                <tbody>
+                                    <template for:each={urgentCases} for:item="c">
+                                        <tr key={c.Id}>
+                                            <td><button class="nl" data-id={c.Id} onclick={navigateToRecord}>{c.CaseNumber}</button></td>
+                                            <td>{c.Subject}</td>
+                                            <td><span class={c.statusChipCls}>{c.Status}</span></td>
+                                            <td>{c.Type}</td>
+                                            <td>{c.modifiedLabel}</td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Work orders -->
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#0070d2">WO</div>
+                                <h3>Work Orders</h3>
+                                <button class="sf-btn" onclick={navigateToNewWorkOrder}>+ New WO</button>
+                            </div>
+                            <table class="tbl">
+                                <thead><tr><th>WO #</th><th>Subject</th><th>Status</th><th>Start</th></tr></thead>
+                                <tbody>
+                                    <template for:each={workOrders} for:item="wo">
+                                        <tr key={wo.Id}>
+                                            <td><button class="nl" data-id={wo.Id} onclick={navigateToRecord}>{wo.WorkOrderNumber}</button></td>
+                                            <td>{wo.Subject}</td>
+                                            <td>{wo.Status}</td>
+                                            <td>{wo.StartDate}</td>
+                                        </tr>
+                                    </template>
+                                    <template if:true={noWorkOrders}>
+                                        <tr><td colspan="4" class="empty-state">No open work orders.</td></tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Right rail -->
+                    <div class="layout-rail">
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#534ab7">AI</div><h3>Agentforce Assist</h3></div>
+                            <div class="agent-card"><div class="agent-title">Builder Intelligence</div><div class="agent-copy">Ask Agentforce for builder history, open issues, and recommended next steps.</div></div>
+                        </div>
+                        <div class="card last">
+                            <div class="ch"><div class="ci" style="background:#04844b">SC</div><h3>Quick Actions</h3></div>
+                            <div class="qa-list">
+                                <button class="qa-item" onclick={navigateToNewCase}>+ New Case</button>
+                                <button class="qa-item" onclick={navigateToNewWorkOrder}>+ New Work Order</button>
+                                <button class="qa-item" onclick={navigateToNewQuote}>+ New Quote</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- ══ SITE VISITS ════════════════════════════════════════════ -->
+            <template if:true={isSiteVisits}>
+                <div class="layout">
+                    <div class="layout-main">
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#0070d2">SA</div>
+                                <h3>Service Appointments</h3>
+                                <button class="sf-btn primary" onclick={navigateToNewServiceAppointment}>+ Create Site Visit</button>
+                            </div>
+                            <table class="tbl">
+                                <thead><tr><th>SA #</th><th>Subject</th><th>Account</th><th>Status</th><th>Scheduled Start</th><th>Scheduled End</th></tr></thead>
+                                <tbody>
+                                    <template for:each={serviceAppointments} for:item="sa">
+                                        <tr key={sa.Id}>
+                                            <td><button class="nl" data-id={sa.Id} onclick={navigateToRecord}>{sa.AppointmentNumber}</button></td>
+                                            <td>{sa.Subject}</td>
+                                            <td>{sa.Account.Name}</td>
+                                            <td><span class="chip cgr">{sa.Status}</span></td>
+                                            <td>{sa.SchedStartTime}</td>
+                                            <td>{sa.SchedEndTime}</td>
+                                        </tr>
+                                    </template>
+                                    <template if:true={noServiceAppts}>
+                                        <tr><td colspan="6" class="empty-state">No upcoming site visits scheduled. Click "+ Create Site Visit" to schedule one.</td></tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#fe9339">WO</div>
+                                <h3>Related Work Orders</h3>
+                                <button class="sf-btn" onclick={navigateToNewWorkOrder}>+ New Work Order</button>
+                            </div>
+                            <table class="tbl">
+                                <thead><tr><th>WO #</th><th>Subject</th><th>Status</th><th>Account</th><th>Start</th></tr></thead>
+                                <tbody>
+                                    <template for:each={workOrders} for:item="wo">
+                                        <tr key={wo.Id}>
+                                            <td><button class="nl" data-id={wo.Id} onclick={navigateToRecord}>{wo.WorkOrderNumber}</button></td>
+                                            <td>{wo.Subject}</td>
+                                            <td>{wo.Status}</td>
+                                            <td>{wo.Account.Name}</td>
+                                            <td>{wo.StartDate}</td>
+                                        </tr>
+                                    </template>
+                                    <template if:true={noWorkOrders}>
+                                        <tr><td colspan="5" class="empty-state">No open work orders.</td></tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Right rail -->
+                    <div class="layout-rail">
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#534ab7">AI</div><h3>Agentforce Assist</h3></div>
+                            <div class="agent-card"><div class="agent-title">Field Scheduling AI</div><div class="agent-copy">Agentforce can suggest optimal appointment windows and flag scheduling conflicts when enabled.</div></div>
+                        </div>
+                        <div class="card last">
+                            <div class="ch"><div class="ci" style="background:#04844b">SC</div><h3>Quick Actions</h3></div>
+                            <div class="qa-list">
+                                <button class="qa-item" onclick={navigateToNewServiceAppointment}>+ Create Site Visit</button>
+                                <button class="qa-item" onclick={navigateToNewWorkOrder}>+ New Work Order</button>
+                                <button class="qa-item" onclick={navigateToNewCase}>+ New Case</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- ══ EPO / PO CHANGES ════════════════════════════════════════ -->
+            <template if:true={isEpo}>
+                <div class="layout">
+                    <div class="layout-main">
+                        <div class="ab ab-a">
+                            <strong>EPO / PO Changes</strong> Cases with Type = "EPO" appear here. Each EPO may require builder approval, scope update, or child Work Order creation. Review and action before advancing.
+                        </div>
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#fe9339">EP</div>
+                                <h3>EPO / PO Change Cases</h3>
+                                <button class="sf-btn primary" onclick={navigateToNewCase}>+ New EPO Case</button>
+                            </div>
+                            <table class="tbl">
+                                <thead>
+                                    <tr>
+                                        <th>Case #</th>
+                                        <th>Subject</th>
+                                        <th>Account</th>
+                                        <th>Status</th>
+                                        <th>Priority</th>
+                                        <th>Modified</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template for:each={epoCases} for:item="c">
+                                        <tr key={c.Id}>
+                                            <td><button class="nl" data-id={c.Id} onclick={navigateToRecord}>{c.CaseNumber}</button></td>
+                                            <td>{c.Subject}</td>
+                                            <td>{c.accountName}</td>
+                                            <td><span class={c.statusChipCls}>{c.Status}</span></td>
+                                            <td><span class={c.priorityCls}>{c.Priority}</span></td>
+                                            <td>{c.modifiedLabel}</td>
+                                            <td>
+                                                <div style="display:flex;gap:4px">
+                                                    <button class="sf-btn" data-id={c.Id} onclick={handleSendReminder}>Send Reminder</button>
+                                                    <button class="sf-btn danger" data-id={c.Id} onclick={handleEscalateCase}>Escalate</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <template if:true={noEpoCases}>
+                                        <tr><td colspan="7" class="empty-state">No open EPO / PO Change cases. Cases with Type = "EPO" will appear here.</td></tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Right rail -->
+                    <div class="layout-rail">
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#534ab7">AI</div><h3>Agentforce Assist</h3></div>
+                            <div class="agent-card"><div class="agent-title">EPO Review AI</div><div class="agent-copy">Agentforce can summarize EPO scope, flag pricing conflicts, and draft approval notes when enabled.</div></div>
+                        </div>
+                        <div class="card last">
+                            <div class="ch"><div class="ci" style="background:#04844b">SC</div><h3>Quick Actions</h3></div>
+                            <div class="qa-list">
+                                <button class="qa-item" onclick={navigateToNewCase}>+ New EPO Case</button>
+                                <button class="qa-item" data-tab="11" onclick={handleTabClick}>👍 Go to Approvals</button>
+                                <button class="qa-item" onclick={navigateToNewWorkOrder}>+ Child Work Order</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- ══ WARRANTY ════════════════════════════════════════════════ -->
+            <template if:true={isWarranty}>
+                <div class="layout">
+                    <div class="layout-main">
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#534ab7">WR</div>
+                                <h3>Warranty Cases</h3>
+                                <button class="sf-btn primary" onclick={navigateToNewCase}>+ New Warranty Case</button>
+                            </div>
+                            <table class="tbl">
+                                <thead>
+                                    <tr>
+                                        <th>Case #</th>
+                                        <th>Subject</th>
+                                        <th>Account</th>
+                                        <th>Contact</th>
+                                        <th>Status</th>
+                                        <th>Modified</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template for:each={warrantyCases} for:item="c">
+                                        <tr key={c.Id}>
+                                            <td><button class="nl" data-id={c.Id} onclick={navigateToRecord}>{c.CaseNumber}</button></td>
+                                            <td>{c.Subject}</td>
+                                            <td>{c.accountName}</td>
+                                            <td>{c.contactName}</td>
+                                            <td><span class={c.statusChipCls}>{c.Status}</span></td>
+                                            <td>{c.modifiedLabel}</td>
+                                            <td>
+                                                <button class="sf-btn" data-id={c.Id} onclick={navigateToRecord}>Open</button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <template if:true={noWarrantyCases}>
+                                        <tr><td colspan="7" class="empty-state">No open Warranty cases. Cases with Type = "Warranty" appear here.</td></tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="ab ab-b">
+                            Coverage decisions are recorded on the Case record. For field correction, create a Work Order and Service Appointment from the Case record's related lists.
+                        </div>
+                    </div>
+
+                    <!-- Right rail -->
+                    <div class="layout-rail">
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#534ab7">AI</div><h3>Agentforce Assist</h3></div>
+                            <div class="agent-card"><div class="agent-title">Warranty AI</div><div class="agent-copy">Agentforce can check warranty coverage history and surface relevant knowledge articles when enabled.</div></div>
+                        </div>
+                        <div class="card last">
+                            <div class="ch"><div class="ci" style="background:#04844b">SC</div><h3>Quick Actions</h3></div>
+                            <div class="qa-list">
+                                <button class="qa-item" onclick={navigateToNewCase}>+ New Warranty Case</button>
+                                <button class="qa-item" onclick={navigateToNewWorkOrder}>+ Work Order</button>
+                                <button class="qa-item" data-tab="9" onclick={handleTabClick}>📖 Warranty Playbooks</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- ══ SAME-DAY ════════════════════════════════════════════════ -->
+            <template if:true={isSameDay}>
+                <div class="layout">
+                    <div class="layout-main">
+                        <div class="ab ab-r">
+                            <strong>Same-Day Response Required</strong> — These cases require field response today. Coordinate Work Order and Service Appointment immediately.
+                        </div>
+                        <div class="card alert">
+                            <div class="ch">
+                                <div class="ci" style="background:#c23934">⚡</div>
+                                <h3>Same-Day Cases</h3>
+                                <button class="sf-btn primary" onclick={navigateToNewCase}>+ New Same-Day Case</button>
+                            </div>
+                            <table class="tbl">
+                                <thead>
+                                    <tr>
+                                        <th>Case #</th>
+                                        <th>Subject</th>
+                                        <th>Account</th>
+                                        <th>Status</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template for:each={samedayCases} for:item="c">
+                                        <tr key={c.Id}>
+                                            <td><button class="nl" data-id={c.Id} onclick={navigateToRecord}>{c.CaseNumber}</button></td>
+                                            <td>{c.Subject}</td>
+                                            <td>{c.accountName}</td>
+                                            <td><span class={c.statusChipCls}>{c.Status}</span></td>
+                                            <td>{c.modifiedLabel}</td>
+                                            <td>
+                                                <div style="display:flex;gap:4px">
+                                                    <button class="sf-btn" onclick={navigateToNewServiceAppointment}>Schedule SA</button>
+                                                    <button class="sf-btn danger" data-id={c.Id} onclick={handleEscalateCase}>Escalate</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <template if:true={noSamedayCases}>
+                                        <tr><td colspan="6" class="empty-state">No open Same-Day cases. Cases with Type = "Same-Day" appear here.</td></tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#0070d2">SA</div>
+                                <h3>Today's Service Appointments</h3>
+                                <button class="sf-btn" onclick={navigateToNewServiceAppointment}>+ New SA</button>
+                            </div>
+                            <table class="tbl">
+                                <thead><tr><th>SA #</th><th>Subject</th><th>Status</th><th>Start</th></tr></thead>
+                                <tbody>
+                                    <template for:each={serviceAppointments} for:item="sa">
+                                        <tr key={sa.Id}>
+                                            <td><button class="nl" data-id={sa.Id} onclick={navigateToRecord}>{sa.AppointmentNumber}</button></td>
+                                            <td>{sa.Subject}</td>
+                                            <td><span class="chip cgr">{sa.Status}</span></td>
+                                            <td>{sa.SchedStartTime}</td>
+                                        </tr>
+                                    </template>
+                                    <template if:true={noServiceAppts}>
+                                        <tr><td colspan="4" class="empty-state">No service appointments scheduled.</td></tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Right rail -->
+                    <div class="layout-rail">
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#534ab7">AI</div><h3>Agentforce Assist</h3></div>
+                            <div class="agent-card"><div class="agent-title">Same-Day Coordinator</div><div class="agent-copy">Agentforce can suggest available field techs, routes, and draft customer notifications for same-day work when enabled.</div></div>
+                        </div>
+                        <div class="card last">
+                            <div class="ch"><div class="ci" style="background:#04844b">SC</div><h3>Quick Actions</h3></div>
+                            <div class="qa-list">
+                                <button class="qa-item" onclick={navigateToNewCase}>+ New Same-Day Case</button>
+                                <button class="qa-item" onclick={navigateToNewServiceAppointment}>+ Schedule SA</button>
+                                <button class="qa-item" data-tab="11" onclick={handleTabClick}>👍 Approvals</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- ══ CLOSEOUT QUEUE ══════════════════════════════════════════ -->
+            <template if:true={isCloseout}>
+                <div class="layout">
+                    <div class="layout-main">
+                        <div class="card ok">
+                            <div class="ch">
+                                <div class="ci" style="background:#04844b">CQ</div>
+                                <h3>Closeout Cases</h3>
+                            </div>
+                            <table class="tbl">
+                                <thead>
+                                    <tr>
+                                        <th>Case #</th>
+                                        <th>Subject</th>
+                                        <th>Account</th>
+                                        <th>Status</th>
+                                        <th>Modified</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template for:each={closeoutCases} for:item="c">
+                                        <tr key={c.Id}>
+                                            <td><button class="nl" data-id={c.Id} onclick={navigateToRecord}>{c.CaseNumber}</button></td>
+                                            <td>{c.Subject}</td>
+                                            <td>{c.accountName}</td>
+                                            <td><span class={c.statusChipCls}>{c.Status}</span></td>
+                                            <td>{c.modifiedLabel}</td>
+                                            <td><button class="sf-btn" data-id={c.Id} onclick={navigateToRecord}>Review</button></td>
+                                        </tr>
+                                    </template>
+                                    <template if:true={noCloseoutCases}>
+                                        <tr><td colspan="6" class="empty-state">No open Closeout cases. Cases with Type = "Closeout" appear here.</td></tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#0070d2">WO</div>
+                                <h3>Work Orders Pending Closeout Review</h3>
+                            </div>
+                            <table class="tbl">
+                                <thead><tr><th>WO #</th><th>Subject</th><th>Account</th><th>Status</th><th>End Date</th><th>Actions</th></tr></thead>
+                                <tbody>
+                                    <template for:each={workOrders} for:item="wo">
+                                        <tr key={wo.Id}>
+                                            <td><button class="nl" data-id={wo.Id} onclick={navigateToRecord}>{wo.WorkOrderNumber}</button></td>
+                                            <td>{wo.Subject}</td>
+                                            <td>{wo.Account.Name}</td>
+                                            <td>{wo.Status}</td>
+                                            <td>{wo.EndDate}</td>
+                                            <td><button class="sf-btn success" data-id={wo.Id} onclick={navigateToRecord}>Review &amp; Close</button></td>
+                                        </tr>
+                                    </template>
+                                    <template if:true={noWorkOrders}>
+                                        <tr><td colspan="6" class="empty-state">No work orders pending closeout review.</td></tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Right rail -->
+                    <div class="layout-rail">
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#534ab7">AI</div><h3>Agentforce Assist</h3></div>
+                            <div class="agent-card"><div class="agent-title">Closeout AI</div><div class="agent-copy">Agentforce can draft customer follow-up emails and flag missing invoice documentation when enabled.</div></div>
+                        </div>
+                        <div class="card last">
+                            <div class="ch"><div class="ci" style="background:#04844b">SC</div><h3>Quick Actions</h3></div>
+                            <div class="qa-list">
+                                <button class="qa-item" data-tab="12" onclick={handleTabClick}>💰 Quotes + Quote Builder</button>
+                                <button class="qa-item" data-tab="11" onclick={handleTabClick}>👍 Approvals</button>
+                                <button class="qa-item" onclick={navigateToNewCase}>+ New Case</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- ══ KNOWLEDGE + PLAYBOOKS ══════════════════════════════════ -->
+            <template if:true={isKnowledge}>
+                <div class="layout">
+                    <div class="layout-main">
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#0070d2">KB</div>
+                                <h3>Knowledge Base</h3>
+                            </div>
+                            <div class="list-toolbar">
+                                <input type="text" class="list-search" placeholder="Search articles…" onchange={handleKnowledgeSearch} />
+                            </div>
+                            <template if:true={noKnowledgeArticles}>
+                                <div class="setup-state">
+                                    <strong>Knowledge Not Enabled or No Articles Found</strong>
+                                    Enable Salesforce Knowledge in Setup → Knowledge Settings. Once enabled and articles are published (Online, en_US), they will appear here.
+                                    <br/><br/>
+                                    Contact your Salesforce admin to enable Knowledge and import or create warranty, EPO, and same-day playbook articles.
+                                </div>
+                            </template>
+                            <template for:each={knowledgeArticles} for:item="article">
+                                <div key={article.Id} class="inbox-row" data-id={article.Id} onclick={navigateToRecord}>
+                                    <div class="inbox-icon" style="background:#0070d2">📖</div>
+                                    <div class="inbox-content">
+                                        <div class="inbox-subject">{article.Title}</div>
+                                        <div class="inbox-preview">{article.Summary}</div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#534ab7">MC</div>
+                                <h3>Macros</h3>
+                            </div>
+                            <div class="setup-state">
+                                <strong>Run Macros from a Case Record</strong>
+                                Open a Case record and use the Macros action in the Action Bar to run macros. Macros can auto-populate fields, send templates, and update status in one click.
+                                <br/><br/>
+                                <button class="sf-btn" onclick={navigateToCases}>Go to Cases →</button>
+                            </div>
+                        </div>
+
+                        <div class="card last">
+                            <div class="ch">
+                                <div class="ci" style="background:#04844b">QT</div>
+                                <h3>Quick Text</h3>
+                            </div>
+                            <div class="setup-state">
+                                <strong>Insert Quick Text from a Case Composer</strong>
+                                Open a Case record, use the Email or Chatter composer, and click the Quick Text button to insert pre-approved message snippets.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right rail -->
+                    <div class="layout-rail">
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#534ab7">AI</div><h3>Agentforce Assist</h3></div>
+                            <div class="agent-card"><div class="agent-title">Knowledge AI</div><div class="agent-copy">Agentforce can surface relevant articles automatically based on the open case subject and description when enabled.</div></div>
+                        </div>
+                        <div class="card last">
+                            <div class="ch"><div class="ci" style="background:#04844b">SC</div><h3>Quick Actions</h3></div>
+                            <div class="qa-list">
+                                <button class="qa-item" onclick={navigateToCases}>📋 Cases</button>
+                                <button class="qa-item" data-tab="0" onclick={handleTabClick}>⊞ Home</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- ══ REPORTS ════════════════════════════════════════════════ -->
+            <template if:true={isReports}>
+                <div class="layout">
+                    <div class="layout-main">
+                        <!-- Live count summary -->
+                        <div class="g4">
+                            <div class="kpi ka">
+                                <div class="kn">{kpiOpenCases}</div>
+                                <div class="kl">Open Cases</div>
+                            </div>
+                            <div class="kpi korange">
+                                <div class="kn">{kpiOpenWorkOrders}</div>
+                                <div class="kl">Open Work Orders</div>
+                            </div>
+                            <div class="kpi kp">
+                                <div class="kn">{kpiPendingApprovals}</div>
+                                <div class="kl">Pending Approvals</div>
+                            </div>
+                            <div class="kpi kg">
+                                <div class="kn">{kpiSiteVisitsWeek}</div>
+                                <div class="kl">Site Visits (Wk)</div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#0070d2">RP</div>
+                                <h3>Salesforce Reports</h3>
+                                <button class="sf-btn primary" onclick={navigateToReports}>Open Report Builder ↗</button>
+                            </div>
+                            <div class="list-toolbar">
+                                <span style="font-size:12px;color:#54698d">Navigate to the reports below or open Report Builder to create new views.</span>
+                            </div>
+                            <table class="tbl">
+                                <thead><tr><th>Report</th><th>Description</th><th></th></tr></thead>
+                                <tbody>
+                                    <tr>
+                                        <td><span class="nl">Open Cases by Type</span></td>
+                                        <td>Warranty, EPO, Same-Day, Closeout case counts</td>
+                                        <td><button class="sf-btn" onclick={navigateToReports}>Open ↗</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="nl">Site Visits This Month</span></td>
+                                        <td>Service Appointments scheduled and completed this month</td>
+                                        <td><button class="sf-btn" onclick={navigateToReports}>Open ↗</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="nl">EPO Aging</span></td>
+                                        <td>Open EPO cases grouped by age bucket</td>
+                                        <td><button class="sf-btn" onclick={navigateToReports}>Open ↗</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="nl">Quote Pipeline</span></td>
+                                        <td>Quotes by status, builder, and amount</td>
+                                        <td><button class="sf-btn" onclick={navigateToReports}>Open ↗</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="nl">Approval Queue Summary</span></td>
+                                        <td>Pending approvals by owner and elapsed time</td>
+                                        <td><button class="sf-btn" onclick={navigateToReports}>Open ↗</button></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="card last">
+                            <div class="ch">
+                                <div class="ci" style="background:#fe9339">DB</div>
+                                <h3>Dashboards</h3>
+                                <button class="sf-btn" onclick={navigateToDashboards}>Open Dashboard Builder ↗</button>
+                            </div>
+                            <div style="padding:12px 14px;font-size:12px;color:#54698d;line-height:1.6">
+                                Customer Success dashboards can be pinned to the Salesforce home page. Go to the Dashboards tab to find or build the Customer Success command center dashboard.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right rail -->
+                    <div class="layout-rail">
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#534ab7">AI</div><h3>Agentforce Assist</h3></div>
+                            <div class="agent-card"><div class="agent-title">Reporting AI</div><div class="agent-copy">Ask Agentforce to summarize trends or surface anomalies in case volume, response times, or builder activity.</div></div>
+                        </div>
+                        <div class="card last">
+                            <div class="ch"><div class="ci" style="background:#04844b">SC</div><h3>Quick Actions</h3></div>
+                            <div class="qa-list">
+                                <button class="qa-item" onclick={navigateToReports}>↗ Report Builder</button>
+                                <button class="qa-item" onclick={navigateToDashboards}>↗ Dashboards</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- ══ APPROVALS ═══════════════════════════════════════════════ -->
+            <template if:true={isApprovals}>
+                <div class="layout">
+                    <div class="layout-main">
+                        <div class="ab ab-a">
+                            Approvals include: EPO / PO Change review, Quote validation, Warranty coverage, Same-Day urgent response, Closeout validation, SLA breach review, missing proof review, and builder exceptions.
+                        </div>
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#534ab7">AP</div>
+                                <h3>Pending Approvals</h3>
+                            </div>
+                            <template if:true={approvalsError}>
+                                <div class="error-state">{approvalsError}</div>
+                            </template>
+                            <template if:true={noApprovals}>
+                                <div class="empty-state">
+                                    No pending approvals assigned to you.<br/>
+                                    If you expect items here, confirm approval process configuration in Setup → Approval Processes.
+                                </div>
+                            </template>
+                            <template for:each={approvals} for:item="approval">
+                                <div key={approval.Id} class="approval-row">
+                                    <div>
+                                        <div style="font-size:12px;font-weight:500;color:#16325c">
+                                            {approval.targetId}
+                                        </div>
+                                        <div style="font-size:11px;color:#54698d">
+                                            Submitted by {approval.submittedBy} · {approval.createdLabel}
+                                        </div>
+                                    </div>
+                                    <div><span class="chip ca">{approval.status}</span></div>
+                                    <div style="font-size:11px;color:#54698d">{approval.elapsedDays} elapsed</div>
+                                    <div class="approval-actions">
+                                        <button class="sf-btn" data-action="review" data-id={approval.Id} data-targetid={approval.targetId} onclick={handleApprovalAction}>Review</button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Right rail -->
+                    <div class="layout-rail">
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#534ab7">AI</div><h3>Agentforce Assist</h3></div>
+                            <div class="agent-card"><div class="agent-title">Approval AI</div><div class="agent-copy">Agentforce can summarize approval context and flag required documentation before you approve or reject.</div></div>
+                        </div>
+                        <div class="card last">
+                            <div class="ch"><div class="ci" style="background:#04844b">SC</div><h3>Quick Actions</h3></div>
+                            <div class="qa-list">
+                                <button class="qa-item" data-tab="5" onclick={handleTabClick}>📝 EPO / PO Changes</button>
+                                <button class="qa-item" data-tab="12" onclick={handleTabClick}>💰 Quotes</button>
+                                <button class="qa-item" data-tab="6" onclick={handleTabClick}>🛡 Warranty</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- ══ QUOTES + QUOTE BUILDER ══════════════════════════════════ -->
+            <template if:true={isQuotes}>
+                <div class="layout">
+                    <div class="layout-main">
+                        <div class="card">
+                            <div class="ch">
+                                <div class="ci" style="background:#04844b">Q</div>
+                                <h3>Quotes</h3>
+                                <button class="sf-btn primary" onclick={navigateToNewQuote}>+ New Quote</button>
+                            </div>
+                            <template if:true={quotesError}>
+                                <div class="error-state">{quotesError}</div>
+                            </template>
+                            <table class="tbl">
+                                <thead>
+                                    <tr>
+                                        <th>Quote Name</th>
+                                        <th>Account</th>
+                                        <th>Status</th>
+                                        <th class="num">Total</th>
+                                        <th>Expires</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template for:each={quotes} for:item="q">
+                                        <tr key={q.Id}>
+                                            <td><button class="nl" data-id={q.Id} onclick={navigateToRecord}>{q.Name}</button></td>
+                                            <td>{q.Account.Name}</td>
+                                            <td><span class="chip cgr">{q.Status}</span></td>
+                                            <td class="num">{q.GrandTotal}</td>
+                                            <td>{q.ExpirationDate}</td>
+                                            <td>
+                                                <div style="display:flex;gap:4px">
+                                                    <button class="sf-btn" data-id={q.Id} onclick={handleQuoteSelect}>Build Lines</button>
+                                                    <button class="sf-btn blue" data-id={q.Id} onclick={navigateToRecord}>Open ↗</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <template if:true={noQuotes}>
+                                        <tr><td colspan="6" class="empty-state">No quotes found. Click "+ New Quote" to create one from an Opportunity.</td></tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Quote Line Builder -->
+                        <template if:true={hasSelectedQuote}>
+                            <div class="card">
+                                <div class="ch">
+                                    <div class="ci" style="background:#0070d2">QL</div>
+                                    <h3>Quote Line Items</h3>
+                                    <button class="sf-btn" data-id={selectedQuoteId} onclick={navigateToRecord}>Edit in Salesforce ↗</button>
+                                </div>
+                                <div class="line-row header">
+                                    <div>Product</div>
+                                    <div>Qty</div>
+                                    <div class="num">Unit Price</div>
+                                    <div class="num">Total</div>
+                                </div>
+                                <template for:each={quoteLineItems} for:item="line">
+                                    <div key={line.Id} class="line-row">
+                                        <div>{line.Product2.Name}</div>
+                                        <div>{line.Quantity}</div>
+                                        <div class="num">{line.UnitPrice}</div>
+                                        <div class="num">{line.TotalPrice}</div>
+                                    </div>
+                                </template>
+                                <template if:true={noQuoteLines}>
+                                    <div class="empty-state">No line items on this quote. Open the quote in Salesforce to add products from the Pricebook.</div>
+                                </template>
+                                <div style="padding:10px 14px;border-top:1px solid #e5e5e5">
+                                    <button class="sf-btn blue" data-id={selectedQuoteId} onclick={navigateToRecord}>Open Full Quote Editor ↗</button>
+                                </div>
+                            </div>
+                        </template>
+
+                        <template if:false={hasSelectedQuote}>
+                            <div class="ab ab-b">
+                                Select a quote from the table above to view its line items here. To add or edit products, click "Open Full Quote Editor" to go to the Quote record and use the standard Pricebook / Product selector.
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Right rail -->
+                    <div class="layout-rail">
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#534ab7">AI</div><h3>Agentforce Assist</h3></div>
+                            <div class="agent-card"><div class="agent-title">Quote AI</div><div class="agent-copy">Agentforce can review quote line items for pricing accuracy, flag missing products, and draft the quote cover email when enabled.</div></div>
+                        </div>
+                        <div class="card">
+                            <div class="ch"><div class="ci" style="background:#0070d2">PB</div><h3>Pricebook</h3></div>
+                            <div style="padding:12px 14px;font-size:12px;color:#54698d;line-height:1.6">
+                                Products and pricing are managed in the standard Salesforce Pricebook. Open a Quote record and use the Add Products button to select from the active pricebook entries.
+                            </div>
+                        </div>
+                        <div class="card last">
+                            <div class="ch"><div class="ci" style="background:#04844b">SC</div><h3>Quick Actions</h3></div>
+                            <div class="qa-list">
+                                <button class="qa-item" onclick={navigateToNewQuote}>+ New Quote</button>
+                                <button class="qa-item" data-tab="11" onclick={handleTabClick}>👍 Quote Approvals</button>
+                                <button class="qa-item" data-tab="10" onclick={handleTabClick}>📊 Quote Reports</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+        </div><!-- /sf-body -->
+    </div><!-- /console-root -->
+</template>
