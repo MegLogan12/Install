@@ -13,16 +13,13 @@
 
         STATUS GATE RULES (per spec):
         ─────────────────────────────────────────────────────────────────
-        Draft, Active,
-        Submitted               → no Contact or Lot required (claim flow handles submission)
-        Validated, Reserved,
-        Applied to Quote,
-        Contract Signed,
-        Deposit Paid,
+        Draft, Active, Submitted,
+        Contract Signed, Deposit Paid,
         Builder Invoice Pending,
-        Builder Invoiced,
-        Paid by Builder,
-        Redeemed                → Contact AND (Lot OR Homeowner_Property__c OR Normalized_Address_Key__c) required
+        Builder Invoiced, Paid by Builder,
+        Redeemed                → no Contact or Lot check (ODL lifecycle service manages these)
+        Validated, Reserved,
+        Applied to Quote        → Contact AND Normalized_Address_Key__c required (Lennar gate)
 
         DUPLICATE CHECK:
         ─────────────────────────────────────────────────────────────────
@@ -109,7 +106,7 @@
         <defaultConnectorLabel>No — Draft/Active/Expired/Voided — exit</defaultConnectorLabel>
         <rules>
             <name>Contact_Required_Status</name>
-            <conditionLogic>1 OR 2 OR 3 OR 4 OR 5 OR 6 OR 7 OR 8 OR 9</conditionLogic>
+            <conditionLogic>1 OR 2 OR 3</conditionLogic>
             <conditions>
                 <leftValueReference>$Record.Status__c</leftValueReference>
                 <operator>EqualTo</operator>
@@ -124,36 +121,6 @@
                 <leftValueReference>$Record.Status__c</leftValueReference>
                 <operator>EqualTo</operator>
                 <rightValue><stringValue>Applied to Quote</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Contract Signed</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Deposit Paid</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Builder Invoice Pending</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Builder Invoiced</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Paid by Builder</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Redeemed</stringValue></rightValue>
             </conditions>
             <connector><targetReference>Is_Contact_Present</targetReference></connector>
             <label>Yes — requires Contact</label>
@@ -186,10 +153,10 @@
         <locationX>176</locationX>
         <locationY>360</locationY>
         <defaultConnector><targetReference>Requires_Duplicate_Check</targetReference></defaultConnector>
-        <defaultConnectorLabel>No — Submitted only needs Contact</defaultConnectorLabel>
+        <defaultConnectorLabel>No — allow (Contact gate already passed)</defaultConnectorLabel>
         <rules>
             <name>Lot_Required_Status</name>
-            <conditionLogic>1 OR 2 OR 3 OR 4 OR 5 OR 6 OR 7 OR 8 OR 9</conditionLogic>
+            <conditionLogic>1 OR 2 OR 3</conditionLogic>
             <conditions>
                 <leftValueReference>$Record.Status__c</leftValueReference>
                 <operator>EqualTo</operator>
@@ -205,38 +172,8 @@
                 <operator>EqualTo</operator>
                 <rightValue><stringValue>Applied to Quote</stringValue></rightValue>
             </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Contract Signed</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Deposit Paid</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Builder Invoice Pending</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Builder Invoiced</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Paid by Builder</stringValue></rightValue>
-            </conditions>
-            <conditions>
-                <leftValueReference>$Record.Status__c</leftValueReference>
-                <operator>EqualTo</operator>
-                <rightValue><stringValue>Redeemed</stringValue></rightValue>
-            </conditions>
             <connector><targetReference>Is_Lot_Or_Property_Present</targetReference></connector>
-            <label>Yes — Validated or beyond</label>
+            <label>Yes — Validated, Reserved, or Applied to Quote</label>
         </rules>
     </decisions>
 
