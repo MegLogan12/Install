@@ -355,6 +355,607 @@ async function cmdCheckLennar() {
   console.log(bold('\n  Paste this output to Claude to build the Lennar flow.\n'));
 }
 
+async function cmdAuditODL() {
+  const cfg = loadConfig();
+  const sf = cfg.salesforce;
+  if (!sf) { console.log(red('\n  Not connected. Run: dispatch connect\n')); process.exit(1); }
+
+  console.log(bold('\n  LOVING — Voucher / Lennar Grilling / Outdoor Living / UpgradeMyBackyard Audit'));
+  console.log(gray(`  Org: ${sf.instanceUrl}  |  ${new Date().toLocaleString()}\n`));
+  console.log(gray('  Running queries… 60–90 seconds.\n'));
+
+  const out = [];
+
+  // ── helpers ──────────────────────────────────────────────────────────
+  async function count(soql) {
+    const r = await sfQuery(sf, soql);
+    return r.ok ? r.total : -1;
+  }
+  async function obj(name) { return sfDescribe(sf, name); }
+  async function q(soql) { return sfQuery(sf, soql); }
+  async function tq(soql) { return sfTooling(sf, soql); }
+  function picklistValues(fields, fieldName) {
+    const f = fields.find(x => x.name === fieldName);
+    return f?.picklistValues?.map(p => p.label) || [];
+  }
+  function fieldLabel(fields, fieldName) {
+    const f = fields.find(x => x.name === fieldName);
+    return f ? f.label : null;
+  }
+
+  // ── 1. OBJECT EXISTS CHECKS ──────────────────────────────────────────
+  process.stdout.write(gray('  Checking objects… '));
+  const [
+    voucherD, paymentD, designD, propertyD, warrantyD,
+    oppD, quoteD, orderD, orderItemD, productD, pbD, pbeD,
+    woD, woliD, saD, campD, acctD, contactD
+  ] = await Promise.all([
+    obj('Voucher__c'), obj('Payment_Milestone__c'), obj('Design_Review__c'),
+    obj('Homeowner_Property__c'), obj('Warranty_Record__c'),
+    obj('Opportunity'), obj('Quote'), obj('Order'), obj('OrderItem'),
+    obj('Product2'), obj('Pricebook2'), obj('PricebookEntry'),
+    obj('WorkOrder'), obj('WorkOrderLineItem'), obj('ServiceAppointment'),
+    obj('Campaign'), obj('Account'), obj('Contact')
+  ]);
+  console.log(green('done'));
+
+  // ── 2. LIVE COUNTS ───────────────────────────────────────────────────
+  process.stdout.write(gray('  Counting records… '));
+  const [
+    voucherCount, paymentCount, designCount, propertyCount, warrantyCount,
+    lennarOppCount, grillProductCount, lennarQuoteCount,
+    totalOppCount, totalProductCount, totalOrderCount, campCount,
+    woCount, saCount, accountCount
+  ] = await Promise.all([
+    count('SELECT COUNT() FROM Voucher__c'),
+    count('SELECT COUNT() FROM Payment_Milestone__c'),
+    voucherD.exists ? count('SELECT COUNT() FROM Design_Review__c') : Promise.resolve(-1),
+    voucherD.exists ? count('SELECT COUNT() FROM Homeowner_Property__c') : Promise.resolve(-1),
+    voucherD.exists ? count('SELECT COUNT() FROM Warranty_Record__c') : Promise.resolve(-1),
+    count("SELECT COUNT() FROM Opportunity WHERE Name LIKE '%Lennar%' OR Name LIKE '%Grill%' OR Name LIKE '%Outdoor Living%' OR Name LIKE '%UpgradeMyBackyard%' OR Name LIKE '%UMB%'"),
+    count("SELECT COUNT() FROM Product2 WHERE Name LIKE '%Grill%' OR Name LIKE '%Outdoor%' OR Name LIKE '%Retreat%' OR Name LIKE '%Entertainer%' OR Name LIKE '%Signature%' OR Name LIKE '%Lennar%'"),
+    count("SELECT COUNT() FROM Quote WHERE Name LIKE '%Lennar%' OR Name LIKE '%Grill%' OR Name LIKE '%Outdoor%' OR Name LIKE '%UMB%'"),
+    count('SELECT COUNT() FROM Opportunity'),
+    count('SELECT COUNT() FROM Product2'),
+    orderD.exists ? count('SELECT COUNT() FROM Order') : Promise.resolve(-1),
+    count('SELECT COUNT() FROM Campaign'),
+    count('SELECT COUNT() FROM WorkOrder'),
+    count('SELECT COUNT() FROM ServiceAppointment'),
+    count('SELECT COUNT() FROM Account'),
+  ]);
+  console.log(green('done'));
+
+  // ── 3. VOUCHER DETAILS ───────────────────────────────────────────────
+  process.stdout.write(gray('  Inspecting Voucher__c fields… '));
+  const voucherStatusValues = voucherD.ok ? picklistValues(voucherD.fields, 'Status__c') : [];
+  const voucherTypeValues   = voucherD.ok ? picklistValues(voucherD.fields, 'Voucher_Type__c') : [];
+  const voucherSponsorVals  = voucherD.ok ? picklistValues(voucherD.fields, 'Sponsor_Payment_Responsibility__c') : [];
+  const hasReservedOpp      = voucherD.ok && voucherD.fields.some(f => f.name === 'Reserved_Opportunity__c');
+  const hasRedeemedQuote    = voucherD.ok && voucherD.fields.some(f => f.name === 'Redeemed_Quote__c');
+  const hasPaymentMs        = voucherD.ok && voucherD.fields.some(f => f.name === 'Payment_Milestone__c');
+  const hasCampaign         = voucherD.ok && voucherD.fields.some(f => f.name === 'Campaign__c');
+  const hasBuilderAcct      = voucherD.ok && voucherD.fields.some(f => f.name === 'Builder_Account__c');
+  const hasContact          = voucherD.ok && voucherD.fields.some(f => f.name === 'Contact__c');
+  const hasGrillingField    = voucherD.ok && voucherD.fields.some(f => f.name === 'Standard_Grilling_Island_Included__c');
+  const hasSponsorField     = voucherD.ok && voucherD.fields.some(f => f.name === 'Sponsor_Payment_Responsibility__c');
+  const hasVoucherCode      = voucherD.ok && voucherD.fields.some(f => f.name === 'Voucher_Code__c');
+  const hasExpirationDate   = voucherD.ok && voucherD.fields.some(f => f.name === 'Expiration_Date__c');
+  const hasUpsellFields     = voucherD.ok && voucherD.fields.some(f => f.name === 'Upsell_Eligible__c');
+  console.log(green('done'));
+
+  // ── 4. LENNAR CAMPAIGNS ──────────────────────────────────────────────
+  process.stdout.write(gray('  Checking Lennar campaigns… '));
+  const lennarCamps = await q("SELECT Id,Name,Type,Status,Description FROM Campaign WHERE Name LIKE '%Lennar%' OR Name LIKE '%Grilling%' OR Name LIKE '%Voucher%' ORDER BY Name");
+  const campMemberCount = lennarCamps.records?.length > 0
+    ? await count(`SELECT COUNT() FROM CampaignMember WHERE CampaignId = '${lennarCamps.records[0]?.Id}'`)
+    : 0;
+  console.log(green('done'));
+
+  // ── 5. PRODUCTS / PRICEBOOKS ─────────────────────────────────────────
+  process.stdout.write(gray('  Checking products and pricebooks… '));
+  const grillProducts = await q("SELECT Id,Name,ProductCode,IsActive FROM Product2 WHERE Name LIKE '%Grill%' OR Name LIKE '%Outdoor%' OR Name LIKE '%Retreat%' OR Name LIKE '%Entertainer%' OR Name LIKE '%Signature%' OR Name LIKE '%Lennar%' ORDER BY Name LIMIT 50");
+  const odmProducts   = await q("SELECT Id,Name,ProductCode,IsActive FROM Product2 WHERE Name LIKE '%UMB%' OR Name LIKE '%UpgradeMyBackyard%' OR Name LIKE '%ODL%' OR Name LIKE '%Studio%' ORDER BY Name LIMIT 20");
+  const pricebooks    = await q("SELECT Id,Name,IsActive,IsStandard FROM Pricebook2 ORDER BY Name LIMIT 20");
+  const hasRetreater  = grillProducts.records?.some(p => /retreat/i.test(p.Name));
+  const hasEntertain  = grillProducts.records?.some(p => /entertainer/i.test(p.Name));
+  const hasSignature  = grillProducts.records?.some(p => /signature/i.test(p.Name));
+  console.log(green('done'));
+
+  // ── 6. FLOWS / APEX / LWC ────────────────────────────────────────────
+  process.stdout.write(gray('  Checking flows, Apex, LWC… '));
+  const allFlows  = await tq("SELECT Id,DeveloperName,Status,VersionNumber FROM Flow ORDER BY DeveloperName LIMIT 200");
+  const odlFlows  = (allFlows.records||[]).filter(f => /voucher|lennar|grill|odl|outdoor|umb|upgrade/i.test(f.DeveloperName));
+  const allApex   = await tq("SELECT Id,Name FROM ApexClass ORDER BY Name LIMIT 200");
+  const odlApex   = (allApex.records||[]).filter(c => /voucher|lennar|grill|odl|outdoor|umb|upgrade/i.test(c.Name));
+  const allLWC    = await tq("SELECT Id,DeveloperName FROM LightningComponentBundle ORDER BY DeveloperName LIMIT 200");
+  const odlLWC    = (allLWC.records||[]).filter(c => /voucher|lennar|grill|odl|outdoor|umb|upgrade/i.test(c.DeveloperName));
+  console.log(green('done'));
+
+  // ── 7. PAGES / APPS / TABS ───────────────────────────────────────────
+  process.stdout.write(gray('  Checking pages, apps, tabs… '));
+  const allPages  = await tq("SELECT Id,DeveloperName,EntityDefinitionId FROM FlexiPage WHERE Type='RecordPage' ORDER BY DeveloperName LIMIT 200");
+  const odlPages  = (allPages.records||[]).filter(p => /voucher|odl|outdoor|umb|upgrade|lennar|payment|design|warranty|property/i.test(p.DeveloperName));
+  const allApps   = await tq("SELECT Id,DeveloperName,Label FROM CustomApplication ORDER BY DeveloperName LIMIT 50");
+  const odlApps   = (allApps.records||[]).filter(a => /odl|outdoor|umb|upgrade|dispatch|foreman/i.test(a.DeveloperName));
+  const allTabs   = await tq("SELECT Id,Name FROM CustomTab ORDER BY Name LIMIT 100");
+  const odlTabs   = (allTabs.records||[]).filter(t => /voucher|odl|outdoor|umb|upgrade|lennar|payment|design|warranty|property/i.test(t.Name));
+  console.log(green('done'));
+
+  // ── 8. REPORTS / DASHBOARDS ──────────────────────────────────────────
+  process.stdout.write(gray('  Checking reports and dashboards… '));
+  const odlReports = await q("SELECT Id,Name,DeveloperName FROM Report WHERE Name LIKE '%Voucher%' OR Name LIKE '%Lennar%' OR Name LIKE '%Grilling%' OR Name LIKE '%ODL%' OR Name LIKE '%Outdoor%' OR Name LIKE '%UpgradeMyBackyard%' OR Name LIKE '%UMB%' LIMIT 30");
+  const odlDash    = await q("SELECT Id,Name,DeveloperName FROM Dashboard WHERE Name LIKE '%Voucher%' OR Name LIKE '%Lennar%' OR Name LIKE '%ODL%' OR Name LIKE '%Outdoor%' OR Name LIKE '%UpgradeMyBackyard%' LIMIT 10");
+  console.log(green('done'));
+
+  // ── 9. LABEL SCAN FOR LEGACY UMB TERMS ──────────────────────────────
+  process.stdout.write(gray('  Scanning labels for legacy UMB/Studio terms… '));
+  const legacyLabels = [];
+  const legacyTerms  = ['umb', 'the studio', 'custom build', 'funding source', 'upgrademybackyard'];
+  const goodTerms    = ['upgrademybackyard', 'design build', 'sponsor payment responsibility'];
+  for (const d of [voucherD, oppD, quoteD, woD, acctD, productD]) {
+    if (!d.ok) continue;
+    for (const f of (d.fields||[])) {
+      const lbl = (f.label||'').toLowerCase();
+      const isLegacy = legacyTerms.some(t => lbl.includes(t)) && !goodTerms.includes(lbl);
+      if (isLegacy) legacyLabels.push({ object: d.label || '?', field: f.name, label: f.label });
+    }
+  }
+  // Check tabs/apps for UMB labels
+  const legacyAppTabs = [
+    ...(allApps.records||[]).filter(a => /\bumb\b|the studio/i.test(a.Label||'')).map(a => `App: ${a.Label}`),
+    ...(allTabs.records||[]).filter(t => /\bumb\b|the studio/i.test(t.Name||'')).map(t => `Tab: ${t.Name}`),
+  ];
+  console.log(green('done'));
+
+  // ── 10. PERMISSION SETS ──────────────────────────────────────────────
+  process.stdout.write(gray('  Checking permission sets… '));
+  const odlPermSets = await q("SELECT Id,Name,Label FROM PermissionSet WHERE IsOwnedByProfile=false AND (Name LIKE '%ODL%' OR Name LIKE '%Voucher%' OR Name LIKE '%Outdoor%' OR Name LIKE '%UMB%' OR Name LIKE '%Lennar%') LIMIT 20");
+  console.log(green('done'));
+
+  // ── 11. BUILDER / LENNAR ACCOUNTS ────────────────────────────────────
+  process.stdout.write(gray('  Checking Builder/Lennar accounts… '));
+  const lennarAccts = await q("SELECT Id,Name,Type FROM Account WHERE Name LIKE '%Lennar%' OR Name LIKE '%Builder%' LIMIT 20");
+  console.log(green('done'));
+
+  // ══════════════════════════════════════════════════════════════════
+  // BUILD OUTPUT
+  // ══════════════════════════════════════════════════════════════════
+  const HR = '─'.repeat(110);
+
+  out.push('');
+  out.push(bold('══════════════════════════════════════════════════════════════════════════'));
+  out.push(bold('  VOUCHER / LENNAR GRILLING / OUTDOOR LIVING / UPGRADEMYBACKYARD AUDIT'));
+  out.push(bold(`  ${new Date().toLocaleString()}  |  ${sf.instanceUrl}`));
+  out.push(bold('══════════════════════════════════════════════════════════════════════════'));
+
+  // ── SECTION 1: OBJECT STATUS ─────────────────────────────────────────
+  out.push('');
+  out.push(bold('  ── 1. OBJECT STATUS ─────────────────────────────────────────────────'));
+  const objRows = [
+    ['Voucher__c',            voucherD.ok,  voucherCount],
+    ['Payment_Milestone__c',  paymentD.ok,  paymentCount],
+    ['Design_Review__c',      designD.ok,   designCount],
+    ['Homeowner_Property__c', propertyD.ok, propertyCount],
+    ['Warranty_Record__c',    warrantyD.ok, warrantyCount],
+    ['Opportunity',           oppD.ok,      totalOppCount],
+    ['Quote',                 quoteD.ok,    lennarQuoteCount + ' (Lennar/ODL)'],
+    ['Order',                 orderD.ok,    totalOrderCount],
+    ['Product2',              productD.ok,  totalProductCount],
+    ['Pricebook2',            pbD.ok,       pricebooks.records?.length || 0],
+    ['WorkOrder',             woD.ok,       woCount],
+    ['ServiceAppointment',    saD.ok,       saCount],
+    ['Campaign',              campD.ok,     campCount],
+  ];
+  out.push('  ' + bold('Object'.padEnd(30) + 'Live?'.padEnd(10) + 'Record Count'));
+  out.push('  ' + gray(HR));
+  for (const [name, live, cnt] of objRows) {
+    const liveStr = live ? green('YES'.padEnd(10)) : red('NO'.padEnd(10));
+    const cntStr = cnt === -1 ? gray('N/A') : cnt;
+    out.push(`  ${name.padEnd(30)}${liveStr}${cntStr}`);
+  }
+
+  // ── SECTION 2: LIVE SOQL COUNTS ──────────────────────────────────────
+  out.push('');
+  out.push(bold('  ── 2. LIVE SOQL COUNTS ──────────────────────────────────────────────'));
+  out.push(`  SELECT COUNT() FROM Voucher__c                          → ${bold(String(voucherCount))}`);
+  out.push(`  SELECT COUNT() FROM Payment_Milestone__c               → ${bold(String(paymentCount))}`);
+  out.push(`  SELECT COUNT() FROM Design_Review__c                   → ${bold(designD.ok ? String(designCount) : red('Object not found'))}`);
+  out.push(`  SELECT COUNT() FROM Homeowner_Property__c              → ${bold(propertyD.ok ? String(propertyCount) : red('Object not found'))}`);
+  out.push(`  SELECT COUNT() FROM Warranty_Record__c                 → ${bold(warrantyD.ok ? String(warrantyCount) : red('Object not found'))}`);
+  out.push(`  Opportunities matching Lennar/Grill/ODL/UMB            → ${bold(String(lennarOppCount))}`);
+  out.push(`  Products matching Grill/Outdoor/Retreat/Entertainer    → ${bold(String(grillProductCount))}`);
+  out.push(`  Quotes matching Lennar/Grill/ODL/UMB                   → ${bold(String(lennarQuoteCount))}`);
+
+  // ── SECTION 3: VOUCHER FIELD ANALYSIS ───────────────────────────────
+  out.push('');
+  out.push(bold('  ── 3. VOUCHER__C FIELD ANALYSIS ─────────────────────────────────────'));
+  if (!voucherD.ok) {
+    out.push(red('  Voucher__c not accessible.'));
+  } else {
+    const fieldChecks = [
+      ['Campaign__c (links to Campaign)',             hasCampaign],
+      ['Builder_Account__c (links to Lennar acct)',   hasBuilderAcct],
+      ['Contact__c (links to Homeowner)',             hasContact],
+      ['Reserved_Opportunity__c (links to Opp)',      hasReservedOpp],
+      ['Redeemed_Quote__c (links to Quote)',          hasRedeemedQuote],
+      ['Payment_Milestone__c (links to Payment)',     hasPaymentMs],
+      ['Standard_Grilling_Island_Included__c',        hasGrillingField],
+      ['Sponsor_Payment_Responsibility__c',           hasSponsorField],
+      ['Voucher_Code__c',                             hasVoucherCode],
+      ['Expiration_Date__c',                          hasExpirationDate],
+      ['Upsell_Eligible__c',                         hasUpsellFields],
+    ];
+    fieldChecks.forEach(([label, present]) => {
+      out.push(`  ${label.padEnd(55)} ${present ? green('present') : red('MISSING')}`);
+    });
+    out.push('');
+    out.push(`  Status__c picklist values:               ${voucherStatusValues.join(', ') || red('none / not a picklist')}`);
+    out.push(`  Voucher_Type__c picklist values:         ${voucherTypeValues.join(', ') || red('none / not a picklist')}`);
+    out.push(`  Sponsor_Payment_Responsibility__c vals:  ${voucherSponsorVals.join(', ') || red('none / not a picklist')}`);
+  }
+
+  // ── SECTION 4: LENNAR CAMPAIGNS ──────────────────────────────────────
+  out.push('');
+  out.push(bold('  ── 4. LENNAR / VOUCHER CAMPAIGNS ────────────────────────────────────'));
+  if (!lennarCamps.records?.length) {
+    out.push(red('  No Lennar/Grilling/Voucher campaigns found.'));
+  } else {
+    lennarCamps.records.forEach(c => {
+      out.push(`  ${c.Name.padEnd(60)} ${c.Status.padEnd(15)} ${c.Type||''}`);
+    });
+    out.push(`\n  CampaignMembers on first Lennar campaign: ${campMemberCount}`);
+  }
+
+  // ── SECTION 5: BUILDER / LENNAR ACCOUNTS ─────────────────────────────
+  out.push('');
+  out.push(bold('  ── 5. BUILDER / LENNAR ACCOUNTS ─────────────────────────────────────'));
+  if (!lennarAccts.records?.length) {
+    out.push(red('  No Lennar or Builder accounts found. Voucher Builder_Account__c will have nothing to link to.'));
+  } else {
+    lennarAccts.records.forEach(a => out.push(`  ${a.Name.padEnd(50)} Type: ${a.Type||'(none)'}`));
+  }
+
+  // ── SECTION 6: PRODUCTS / PACKAGES ───────────────────────────────────
+  out.push('');
+  out.push(bold('  ── 6. PRODUCTS / PACKAGES (Grilling / ODL) ─────────────────────────'));
+  out.push(`  Retreat package in Product2:    ${hasRetreater ? green('FOUND') : red('NOT FOUND')}`);
+  out.push(`  Entertainer package:            ${hasEntertain ? green('FOUND') : red('NOT FOUND')}`);
+  out.push(`  Signature package:              ${hasSignature ? green('FOUND') : red('NOT FOUND')}`);
+  if (grillProducts.records?.length) {
+    out.push('\n  Matching ODL products:');
+    grillProducts.records.forEach(p => out.push(`  ${p.Name.padEnd(55)} Active: ${p.IsActive ? green('yes') : red('no')}  Code: ${p.ProductCode||'—'}`));
+  } else {
+    out.push(red('\n  No grilling/outdoor/package products found in Product2.'));
+  }
+  if (odmProducts.records?.length) {
+    out.push('\n  Products with UMB/Studio/ODL names (check for legacy naming):');
+    odmProducts.records.forEach(p => out.push(`  ${yellow('!')} ${p.Name}`));
+  }
+  out.push('\n  Pricebooks:');
+  (pricebooks.records||[]).forEach(pb => out.push(`  ${pb.Name.padEnd(40)} Active: ${pb.IsActive ? green('yes') : red('no')}  Standard: ${pb.IsStandard ? 'yes' : 'no'}`));
+
+  // ── SECTION 7: FLOWS / APEX / LWC ────────────────────────────────────
+  out.push('');
+  out.push(bold('  ── 7. FLOWS / APEX / LWC (ODL / Voucher / Lennar) ──────────────────'));
+  out.push(`  Matching flows (${odlFlows.length}):`);
+  if (!odlFlows.length) {
+    out.push(red('  None found. NOTE: Lennar_Standard_Grilling_Island and Weather_NWS_Classification were just deployed — re-run audit after confirming activation.'));
+  } else {
+    odlFlows.forEach(f => out.push(`  ${f.DeveloperName.padEnd(55)} ${f.Status === 'Active' ? green(f.Status) : yellow(f.Status)}  v${f.VersionNumber}`));
+  }
+  out.push(`\n  Matching Apex classes (${odlApex.length}):`);
+  odlApex.length ? odlApex.forEach(c => out.push(`  ${c.Name}`)) : out.push(red('  None.'));
+  out.push(`\n  Matching LWC components (${odlLWC.length}):`);
+  odlLWC.length ? odlLWC.forEach(c => out.push(`  ${c.DeveloperName}`)) : out.push(red('  None.'));
+
+  // ── SECTION 8: PAGES / APPS / TABS ───────────────────────────────────
+  out.push('');
+  out.push(bold('  ── 8. LIGHTNING PAGES / APPS / TABS (ODL) ──────────────────────────'));
+  out.push(`  ODL record pages (${odlPages.length}):`);
+  odlPages.length ? odlPages.forEach(p => out.push(`  ${p.DeveloperName}`)) : out.push(red('  No ODL-named record pages found.'));
+  out.push(`\n  ODL apps (${odlApps.length}):`);
+  odlApps.length ? odlApps.forEach(a => out.push(`  ${a.DeveloperName.padEnd(40)} Label: ${a.Label||'—'}`)) : out.push(red('  None found.'));
+  out.push(`\n  ODL custom tabs (${odlTabs.length}):`);
+  odlTabs.length ? odlTabs.forEach(t => out.push(`  ${t.Name}`)) : out.push(yellow('  No dedicated ODL tabs found.'));
+
+  // ── SECTION 9: REPORTS / DASHBOARDS ──────────────────────────────────
+  out.push('');
+  out.push(bold('  ── 9. REPORTS / DASHBOARDS (Voucher / ODL) ─────────────────────────'));
+  out.push(`  Matching reports (${odlReports.records?.length||0}):`);
+  (odlReports.records||[]).length ? (odlReports.records||[]).forEach(r => out.push(`  ${r.Name}`)) : out.push(red('  No voucher/ODL reports found.'));
+  out.push(`\n  Matching dashboards (${odlDash.records?.length||0}):`);
+  (odlDash.records||[]).length ? (odlDash.records||[]).forEach(d => out.push(`  ${d.Name}`)) : out.push(red('  No voucher/ODL dashboards found.'));
+
+  // ── SECTION 10: LABEL COMPLIANCE ─────────────────────────────────────
+  out.push('');
+  out.push(bold('  ── 10. LABEL COMPLIANCE (UMB / Studio / Funding Source) ─────────────'));
+  if (!legacyLabels.length && !legacyAppTabs.length) {
+    out.push(green('  No legacy UMB/Studio/Funding Source labels found on audited objects.'));
+  } else {
+    legacyLabels.forEach(l => out.push(`  ${red('LEGACY LABEL')} ${l.object}.${l.field} — "${l.label}"`));
+    legacyAppTabs.forEach(t => out.push(`  ${red('LEGACY NAME')} ${t}`));
+  }
+  const umbApiNames = [
+    ...(odlFlows.filter(f => /\bumb\b/i.test(f.DeveloperName))),
+    ...(odlApex.filter(c => /\bumb\b/i.test(c.Name))),
+    ...(odlLWC.filter(c => /\bumb\b/i.test(c.DeveloperName))),
+  ];
+  if (umbApiNames.length) {
+    out.push(yellow('\n  UMB still in API names (safe to keep if not user-facing):'));
+    umbApiNames.forEach(x => out.push(gray(`  API: ${x.DeveloperName || x.Name}`)));
+  } else {
+    out.push(green('\n  No UMB in flow/Apex/LWC API names detected.'));
+  }
+
+  // ── SECTION 11: PERMISSION SETS ──────────────────────────────────────
+  out.push('');
+  out.push(bold('  ── 11. PERMISSION SETS (ODL / Voucher) ──────────────────────────────'));
+  odlPermSets.records?.length
+    ? odlPermSets.records.forEach(p => out.push(`  ${p.Name.padEnd(40)} ${p.Label}`))
+    : out.push(red('  No ODL/Voucher-specific permission sets found. Access may be via profile only.'));
+
+  // ── SECTION 12: Q&A TABLE ────────────────────────────────────────────
+  out.push('');
+  out.push(bold('  ── 12. DIRECT QUESTION ANSWERS ──────────────────────────────────────'));
+  const qa = [
+    ['Where does the voucher record live?',
+     'Voucher__c custom object',
+     `${voucherCount} records exist. VCH-00000 series.`,
+     voucherCount === 0 ? 'No data' : '',
+     'Use Voucher__c as source of truth for entitlement.'],
+
+    ['Is Voucher__c live in production?',
+     voucherD.ok ? green('YES') : red('NO'),
+     voucherD.ok ? `Object accessible, ${voucherD.fields?.length||0} fields` : 'Object not found',
+     '', ''],
+
+    ['Are Lennar vouchers tied to Builder Account, Campaign, Opportunity, Quote?',
+     hasBuilderAcct && hasCampaign && hasReservedOpp && hasRedeemedQuote ? green('YES — all 4') : yellow('PARTIAL'),
+     `Builder_Account__c: ${hasBuilderAcct?'yes':'NO'} | Campaign__c: ${hasCampaign?'yes':'NO'} | Reserved_Opportunity__c: ${hasReservedOpp?'yes':'NO'} | Redeemed_Quote__c: ${hasRedeemedQuote?'yes':'NO'}`,
+     !lennarAccts.records?.length ? 'No Lennar Account records to link to' : '',
+     'Create Lennar Builder Account records and link vouchers'],
+
+    ['Is Lennar grilling handled via Voucher or standard objects?',
+     'Voucher__c primary',
+     'Standard_Grilling_Island_Included__c field present. Flow now deployed.',
+     'Not connected to Order/OrderItem yet',
+     'Connect Voucher → Opportunity → Quote → Order path'],
+
+    ['Are grilling products in Product2?',
+     grillProductCount > 0 ? yellow(`${grillProductCount} products found`) : red('NOT FOUND'),
+     grillProductCount > 0 ? grillProducts.records?.map(p=>p.Name).join(', ') : 'No grilling products',
+     grillProductCount === 0 ? 'Products must be created before quotes can be built' : '',
+     grillProductCount === 0 ? 'Create Retreat, Entertainer, Signature products in Product2' : 'Verify pricebook entries exist'],
+
+    ['Are Retreat / Entertainer / Signature packages present?',
+     (hasRetreater && hasEntertain && hasSignature) ? green('ALL 3') : red(`${[hasRetreater,hasEntertain,hasSignature].filter(Boolean).length}/3 found`),
+     `Retreat: ${hasRetreater?'yes':'NO'} | Entertainer: ${hasEntertain?'yes':'NO'} | Signature: ${hasSignature?'yes':'NO'}`,
+     (!hasRetreater||!hasEntertain||!hasSignature) ? 'Missing packages block quote creation' : '',
+     'Create all 3 as Product2 records with pricebook entries'],
+
+    ['Is "The Studio" represented as Custom Build?',
+     'Cannot confirm from metadata scan',
+     odmProducts.records?.some(p=>/studio/i.test(p.Name)) ? red('Product named "Studio" found — check label') : green('No Studio product name found'),
+     '', 'Verify in Opportunity/Quote picklist for Lane field'],
+
+    ['Is UMB / UpgradeMyBackyard naming clean?',
+     legacyAppTabs.length === 0 && legacyLabels.filter(l=>/umb/i.test(l.label)).length === 0 ? green('CLEAN') : red('ISSUES FOUND'),
+     legacyAppTabs.join(', ') || 'No legacy app/tab names',
+     '', ''],
+
+    ['Does voucher flow connect to Opportunity?',
+     hasReservedOpp ? yellow('FIELD EXISTS — flow does not auto-create Opp yet') : red('NOT CONNECTED'),
+     'Reserved_Opportunity__c is a lookup field',
+     'Flow sets grilling fields but does not create/link Opportunity',
+     'Build flow step: if no Reserved_Opportunity__c, create Opportunity and link'],
+
+    ['Does voucher flow connect to Quote?',
+     hasRedeemedQuote ? yellow('FIELD EXISTS — flow does not auto-create Quote yet') : red('NOT CONNECTED'),
+     'Redeemed_Quote__c is a lookup field',
+     'Quote creation is manual', 'Build Quote automation after Opp is created'],
+
+    ['Does voucher flow connect to Order / OrderItem?',
+     red('NOT CONNECTED'),
+     'No Order lookup on Voucher__c',
+     'Order path not wired', 'Map Quote → Order conversion'],
+
+    ['Does voucher flow connect to WorkOrder / SA?',
+     red('NOT DIRECTLY'),
+     `WorkOrder: ${woCount} records exist. No Voucher→WO lookup found.`,
+     'Install scheduling not automated from voucher', 'Connect WO creation to Quote approval'],
+
+    ['Are payment milestones connected?',
+     hasPaymentMs ? green('LOOKUP EXISTS') : red('NO LOOKUP'),
+     `Payment_Milestone__c: ${paymentCount} records. Voucher.Payment_Milestone__c: ${hasPaymentMs?'yes':'NO'}`,
+     '', ''],
+
+    ['Are design review steps connected?',
+     designD.ok ? yellow('Object exists') : red('Design_Review__c not found'),
+     designD.ok ? `${designCount} records` : 'Object missing',
+     !designD.ok ? 'No design review object' : 'Not linked from Voucher__c',
+     designD.ok ? 'Add Design_Review__c lookup to Voucher__c' : 'Build Design_Review__c object'],
+
+    ['Is warranty connected?',
+     warrantyD.ok ? yellow('Object exists') : red('Warranty_Record__c not found'),
+     warrantyD.ok ? `${warrantyCount} records` : 'Object missing',
+     'Not linked from Voucher__c', warrantyD.ok ? 'Add warranty lookup' : 'Build Warranty_Record__c'],
+
+    ['Are reports/dashboards showing voucher pipeline?',
+     (odlReports.records?.length||0) > 0 ? yellow(`${odlReports.records.length} reports found`) : red('NONE'),
+     (odlReports.records||[]).map(r=>r.Name).join(', ') || 'No voucher reports',
+     'No dedicated pipeline/redemption dashboards confirmed', 'Build voucher pipeline and redemption rate reports'],
+
+    ['Launch readiness % for Lennar grilling vouchers?',
+     yellow('See readiness table below'), '', '', ''],
+  ];
+
+  const qColW = [48, 14, 32, 22, 28];
+  const qHdr = ['Question','Answer','Evidence','Gap','Recommendation'].map((h,i)=>h.padEnd(qColW[i])).join('  ');
+  out.push('  ' + bold(qHdr));
+  out.push('  ' + gray('─'.repeat(150)));
+  for (const [question, answer, evidence, gap, rec] of qa) {
+    out.push(`  ${question.slice(0,46).padEnd(qColW[0])}  ${String(answer).replace(/\x1b\[[0-9;]*m/g,'').slice(0,12).padEnd(qColW[1])}  ${(evidence||'').slice(0,30).padEnd(qColW[2])}  ${(gap||'').slice(0,20).padEnd(qColW[3])}  ${(rec||'').slice(0,26)}`);
+  }
+
+  // ── SECTION 13: PROCESS MAPPING TABLE ────────────────────────────────
+  out.push('');
+  out.push(bold('  ── 13. BUSINESS PROCESS → OBJECT MAPPING ────────────────────────────'));
+  const mapping = [
+    ['Lennar voucher issued',           'Voucher__c',          'Campaign/CampaignMember', voucherD.ok?green('Keep custom'):red('Missing'), 'Keep — Voucher__c is correct'],
+    ['Voucher → homeowner / lot',       'Contact__c (lookup)', 'Contact/Property',        hasContact?green('Linked'):red('NOT LINKED'), hasContact?'Verify Contact data':'Add Homeowner lookup'],
+    ['Voucher → builder / Lennar',      'Builder_Account__c',  'Account',                 hasBuilderAcct && lennarAccts.records?.length>0?green('Linked'):yellow('Field exists, no data'), lennarAccts.records?.length>0?'Link to Lennar Account':'Create Lennar Account first'],
+    ['Homeowner claims voucher',        'Voucher__c Status__c', 'n/a',                    voucherStatusValues.length?green(voucherStatusValues.join(',')):yellow('Status values unknown'), 'Confirm "Claimed" status value exists'],
+    ['Lead / Opportunity created',      'Reserved_Opportunity__c', 'Opportunity',         hasReservedOpp?yellow('Field exists — manual'):red('Not automated'), 'Automate Opp creation on voucher claim'],
+    ['Grilling package selected',       'Product2',            'Product2/PricebookEntry', grillProductCount>0?yellow('Some products'):red('Retreat/Entertainer/Signature missing'), 'Create all 3 packages in Product2'],
+    ['Quote created',                   'Redeemed_Quote__c',   'Quote',                   hasRedeemedQuote?yellow('Field exists — manual'):red('Not automated'), 'Automate Quote from Opportunity'],
+    ['Order created after approval',    'NOT CONNECTED',       'Order/OrderItem',         red('Gap'), 'Wire Quote → Order conversion'],
+    ['Payment milestones tracked',      'Payment_Milestone__c', 'n/a',                   paymentD.ok?green('Object live'):red('Missing'), paymentD.ok?'Confirm milestone stages':'Build milestone object'],
+    ['Design review completed',         designD.ok?'Design_Review__c':'MISSING', 'n/a',  designD.ok?yellow('Exists — not linked from Voucher'):red('Object missing'), designD.ok?'Add lookup':'Build Design_Review__c'],
+    ['WorkOrder created',               'WorkOrder',           'WorkOrder',               woD.ok?yellow('Exists — not auto-created from Voucher'):red('Missing'), 'Automate WO from Quote/Order approval'],
+    ['ServiceAppointment scheduled',    'ServiceAppointment',  'ServiceAppointment',      saD.ok?yellow('Exists — manual scheduling'):red('Missing'), 'Use FSL dispatcher to schedule SA'],
+    ['Install completed',               'WorkOrder Status',    'WorkOrder',               woD.ok?yellow('Object live — closeout not proven'):red('Missing'), 'Add closeout step to WO'],
+    ['Warranty tracked',                warrantyD.ok?'Warranty_Record__c':'MISSING', 'n/a', warrantyD.ok?yellow('Exists — not linked'):red('Missing'), warrantyD.ok?'Add Warranty lookup':'Build Warranty_Record__c'],
+    ['Voucher reimbursement / billing', 'Builder_Invoice_* fields', 'n/a',              green('Fields present on Voucher__c'), 'Confirm invoice workflow exists'],
+  ];
+  const mColW = [30, 24, 22, 22, 30];
+  out.push('  ' + bold(['Business Step','Current Object','SF Standard Avail','Gap','Recommendation'].map((h,i)=>h.padEnd(mColW[i])).join('  ')));
+  out.push('  ' + gray('─'.repeat(134)));
+  mapping.forEach(([step,cur,std,gap,rec]) => {
+    out.push(`  ${step.padEnd(mColW[0])}  ${cur.padEnd(mColW[1])}  ${std.padEnd(mColW[2])}  ${String(gap).replace(/\x1b\[[0-9;]*m/g,'').padEnd(mColW[3])}  ${rec.slice(0,28)}`);
+  });
+
+  // ── SECTION 14: READINESS SCORE ──────────────────────────────────────
+  out.push('');
+  out.push(bold('  ── 14. LAUNCH READINESS SCORE ───────────────────────────────────────'));
+
+  // Calculate scores
+  const voucherScore = (() => {
+    let s = 0;
+    if (voucherD.ok) s += 20;
+    if (voucherCount > 0) s += 10;
+    if (hasCampaign) s += 10;
+    if (hasBuilderAcct) s += 10;
+    if (hasContact) s += 10;
+    if (hasReservedOpp) s += 10;
+    if (hasRedeemedQuote) s += 10;
+    if (hasGrillingField) s += 10;
+    if (odlFlows.some(f => /lennar|grilling/i.test(f.DeveloperName))) s += 10;
+    return s;
+  })();
+
+  const outdoorScore = (() => {
+    let s = 0;
+    if (odlApps.length > 0) s += 20;
+    if (odlPages.length > 0) s += 20;
+    if (voucherD.ok) s += 15;
+    if (paymentD.ok) s += 15;
+    if (lennarCamps.records?.length > 0) s += 10;
+    if (odlTabs.length > 0) s += 10;
+    if (odlPermSets.records?.length > 0) s += 10;
+    return s;
+  })();
+
+  const productScore = (() => {
+    let s = 0;
+    if (grillProductCount > 0) s += 30;
+    if (hasRetreater) s += 20;
+    if (hasEntertain) s += 20;
+    if (hasSignature) s += 20;
+    if (pricebooks.records?.some(p => p.IsActive)) s += 10;
+    return s;
+  })();
+
+  const quoteScore = (() => {
+    let s = 0;
+    if (quoteD.ok) s += 30;
+    if (hasRedeemedQuote) s += 30;
+    if (lennarQuoteCount > 0) s += 40;
+    return s;
+  })();
+
+  const orderScore = (() => {
+    let s = 0;
+    if (orderD.ok) s += 40;
+    if (totalOrderCount > 0) s += 60;
+    return s;
+  })();
+
+  const woScore = (() => {
+    let s = 0;
+    if (woD.ok) s += 30;
+    if (woCount > 0) s += 30;
+    if (saD.ok) s += 20;
+    if (saCount > 0) s += 20;
+    return s;
+  })();
+
+  const paymentScore = (() => {
+    let s = 0;
+    if (paymentD.ok) s += 50;
+    if (paymentCount > 0) s += 50;
+    return s;
+  })();
+
+  const warrantyScore = (() => {
+    let s = 0;
+    if (warrantyD.ok) s += 50;
+    if (warrantyD.ok && warrantyCount > 0) s += 50;
+    return s;
+  })();
+
+  function scoreBar(pct) {
+    const filled = Math.round(pct / 5);
+    const bar = '█'.repeat(filled) + '░'.repeat(20 - filled);
+    const color = pct >= 70 ? green : pct >= 40 ? yellow : red;
+    return color(`${bar} ${pct}%`);
+  }
+
+  const scoreRows = [
+    ['Voucher / Lennar Grilling',          voucherScore,  voucherD.ok?`${voucherCount} records, flow deployed`:'Object missing', voucherScore<100?'Products + Opp/Quote connection':'','Build product link and Opp automation'],
+    ['Outdoor Living / UpgradeMyBackyard', outdoorScore,  `${odlApps.length} apps, ${odlPages.length} pages`,'Lane picklist on Opp missing','Add lane field and Design Build picklist'],
+    ['Products / Packages',                productScore,  `${grillProductCount} matching products`,'Retreat/Entertainer/Signature missing','Create 3 package products + pricebook entries'],
+    ['Quote path',                         quoteScore,    `${lennarQuoteCount} ODL quotes`,'Manual — not automated from Voucher','Automate Quote from claimed Voucher'],
+    ['Order path',                         orderScore,    `${totalOrderCount} orders`,'Not connected to Voucher/Quote','Wire Quote→Order conversion'],
+    ['WorkOrder / Scheduling path',        woScore,       `${woCount} WOs, ${saCount} SAs`,'Not auto-created from Voucher','Connect WO creation to Quote approval'],
+    ['Payment / Billing path',             paymentScore,  `${paymentCount} milestones`,'Invoice workflow not confirmed','Confirm Builder_Invoice fields are used'],
+    ['Warranty path',                      warrantyScore, warrantyD.ok?`${warrantyCount} records`:'Object missing',warrantyD.ok?'Not linked from Voucher':'Build Warranty_Record__c',warrantyD.ok?'Add lookup + page':'Build object'],
+  ];
+
+  const sColW = [36, 24, 30, 30, 30];
+  out.push('  ' + bold(['Area','Readiness','Evidence','Main Blocker','Next Action'].map((h,i)=>h.padEnd(sColW[i])).join('  ')));
+  out.push('  ' + gray('─'.repeat(154)));
+  for (const [area, score, evidence, blocker, action] of scoreRows) {
+    out.push(`  ${area.padEnd(sColW[0])}  ${scoreBar(score).padEnd(sColW[1] + 20)}  ${(evidence||'').slice(0,28).padEnd(sColW[2])}  ${(blocker||'').slice(0,28).padEnd(sColW[3])}  ${(action||'').slice(0,28)}`);
+  }
+
+  // ── BOTTOM LINE ───────────────────────────────────────────────────────
+  out.push('');
+  out.push(bold('  ── BOTTOM LINE ──────────────────────────────────────────────────────'));
+  out.push('');
+  out.push(`  ${bold('1. Exact objects:')} Voucher__c (${voucherCount} records), Payment_Milestone__c (${paymentCount}), ${designD.ok?`Design_Review__c (${designCount})`:'Design_Review__c MISSING'}, ${warrantyD.ok?`Warranty_Record__c (${warrantyCount})`:'Warranty_Record__c MISSING'}`);
+  out.push(`  ${bold('2. Live data:')} ${voucherCount} vouchers | ${lennarCamps.records?.length||0} Lennar campaigns | ${grillProductCount} ODL products | ${lennarOppCount} Lennar opps | ${lennarQuoteCount} Lennar quotes`);
+  out.push(`  ${bold('3. Apps/tabs/pages:')} ${odlApps.map(a=>a.DeveloperName).join(', ')||'none'} | Pages: ${odlPages.length} | Tabs: ${odlTabs.length}`);
+  out.push(`  ${bold('4. Reports/dashboards:')} ${odlReports.records?.length||0} reports | ${odlDash.records?.length||0} dashboards`);
+  out.push(`  ${bold('5. Top gaps:')} ${[
+    grillProductCount===0 && 'Retreat/Entertainer/Signature products missing',
+    !hasReservedOpp && 'Voucher not auto-connecting to Opportunity',
+    !warrantyD.ok && 'Warranty_Record__c does not exist',
+    !designD.ok && 'Design_Review__c does not exist',
+    (odlReports.records?.length||0)===0 && 'No voucher pipeline reports',
+    lennarAccts.records?.length===0 && 'No Lennar Builder Account records',
+  ].filter(Boolean).join(' | ')}`);
+  out.push(`  ${bold('6. Overall readiness:')} ${Math.round((voucherScore+outdoorScore+productScore+quoteScore)/4)}% average across core ODL paths`);
+  out.push(`  ${bold('7. Connected to backbone?')} ${hasReservedOpp && hasRedeemedQuote && woD.ok ? yellow('PARTIALLY — Voucher links to Opp and Quote but Order and WO not automated') : red('NOT FULLY — key connection points exist but are manual, not automated')}`);
+  out.push(`  ${bold('8. Before launch:')} Create products, create Lennar Account, automate Opp/Quote from Voucher, build Reports/Dashboards, confirm Status picklist values, smoke-test end-to-end`);
+  out.push('');
+  out.push(bold(`  Audit complete: ${new Date().toLocaleString()}`));
+  out.push(gray('  To re-run: node bin/dispatch.js audit-odl'));
+  out.push(gray('  To save:   node bin/dispatch.js audit-odl > odl-audit.txt'));
+  out.push('');
+
+  console.log(out.join('\n'));
+}
+
 async function cmdFix(args) {
   const subCmd = args[0];
   if (!subCmd || subCmd === 'help') {
@@ -1214,6 +1815,7 @@ function printHelp() {
     ${cyan('preview')} [--port N]   Serve the site locally (default port 3000)
     ${cyan('sync')}                 Pull job data from Salesforce (configure SOQL first)
     ${cyan('audit')}               Full production system audit
+    ${cyan('audit-odl')}          Deep Voucher / Lennar / Outdoor Living / UMB audit
     ${cyan('fix')} <subcommand>     Deploy production fixes (run: dispatch fix help)
     ${cyan('check-lennar')}         Deep check of Lennar/Voucher/Campaign data
     ${cyan('help')}                 Show this help
@@ -1240,6 +1842,7 @@ function printHelp() {
     case 'audit':         await cmdAudit(); break;
     case 'fix':           await cmdFix(args); break;
     case 'check-lennar':  await cmdCheckLennar(); break;
+    case 'audit-odl':     await cmdAuditODL(); break;
     case 'help':
     case '--help':
     case '-h':
